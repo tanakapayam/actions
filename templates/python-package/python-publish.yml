@@ -1,0 +1,187 @@
+name: Publish to PyPI
+
+# A starting point for publishing a pure-Python package to PyPI with tanakapayam/actions.
+# Search for EDIT and change each one; see docs/guide.md for what every part is for.
+#
+# Pin every `tanakapayam/actions/...` line to a commit, with the release tag as a comment:
+#   uses: tanakapayam/actions/release/guard@<40-hex commit> # v0.1.0
+# (the release's workflow run prints the line to paste). Dependabot keeps them current.
+#
+#   build    builds once and fingerprints the files
+#   stage    on every Python you support: the files are still the built ones, hold the whole
+#            package, and install and run from clean environments
+#   publish  waits for approval, re-checks the fingerprint, uploads, then installs the release
+#            back from the index and compares hashes (and, on PyPI, provenance)
+#
+# A manual run defaults to `dry-run`: build and stage, upload nothing.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish (dry-run builds and stages only, and uploads nothing)
+        type: choice
+        options: [dry-run, testpypi, pypi]
+        default: dry-run
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.event.release.tag_name || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  VERSION_FILE: src/EDIT_my_package/__init__.py # EDIT: where `__version__ = "x.y.z"` lives
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET: ${{ github.event_name == 'release' && 'pypi' || inputs.target }}
+    outputs:
+      fingerprint: ${{ steps.fingerprint.outputs.digest }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$VERSION_FILE")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check the release is ready
+        if: github.event_name == 'release'
+        uses: tanakapayam/actions/release/guard@COMMIT_SHA # vX.Y.Z
+        with:
+          tag-prefix: v # EDIT: python-v if the repository holds several packages
+          version: ${{ steps.version.outputs.version }}
+      - name: Give a rehearsal a version of its own
+        if: env.TARGET != 'pypi'
+        uses: tanakapayam/actions/python/rehearsal-version@COMMIT_SHA # vX.Y.Z
+        with:
+          file: ${{ env.VERSION_FILE }}
+      - name: Build the sdist and wheel
+        run: uv build -o "$RUNNER_TEMP/dist"
+      - name: twine check
+        run: uvx twine check --strict "$RUNNER_TEMP/dist"/*
+      - name: Fingerprint the distributions
+        id: fingerprint
+        uses: tanakapayam/actions/artifact/fingerprint@COMMIT_SHA # vX.Y.Z
+        with:
+          path: ${{ runner.temp }}/dist
+      - name: Upload the distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist/
+          if-no-files-found: error
+
+  stage:
+    name: Stage (${{ matrix.python-version }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"] # EDIT: the versions you support
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download the distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist
+      - name: Check these are exactly the distributions that were built
+        uses: tanakapayam/actions/artifact/verify-fingerprint@COMMIT_SHA # vX.Y.Z
+        with:
+          path: ${{ runner.temp }}/dist
+          expected: ${{ needs.build.outputs.fingerprint }}
+      - name: Install them into clean environments and smoke-test
+        uses: tanakapayam/actions/python/verify-install@COMMIT_SHA # vX.Y.Z
+        with:
+          dist: ${{ runner.temp }}/dist
+          python: uv run --no-project python
+          # expect-py-typed: "true"
+          # smoke: scripts/smoke.py
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [build, stage]
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/EDIT-my-package/
+    permissions:
+      id-token: write # trusted publishing (OIDC); no API token is stored
+    steps:
+      - name: Download the distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+      - name: Check these are exactly the distributions that were staged
+        uses: tanakapayam/actions/artifact/verify-fingerprint@COMMIT_SHA # vX.Y.Z
+        with:
+          path: dist
+          expected: ${{ needs.build.outputs.fingerprint }}
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+      - name: Install the rehearsal back from TestPyPI and check it
+        # skip-existing makes a re-run harmless, which is also why the hashes are compared:
+        # a skipped upload must not be mistaken for the files that were just built.
+        uses: tanakapayam/actions/python/verify-published@COMMIT_SHA # vX.Y.Z
+        with:
+          dist: dist
+          index: https://test.pypi.org
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build, stage]
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: pypi # EDIT: give this environment required reviewers: it is the approval gate
+      url: https://pypi.org/project/EDIT-my-package/
+    permissions:
+      id-token: write # trusted publishing (OIDC); no API token is stored
+    steps:
+      - name: Download the distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+      - name: Check these are exactly the distributions that were staged
+        uses: tanakapayam/actions/artifact/verify-fingerprint@COMMIT_SHA # vX.Y.Z
+        with:
+          path: dist
+          expected: ${{ needs.build.outputs.fingerprint }}
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - name: Install the release back from PyPI and check it
+        # The upload is done and cannot be undone, so a failure here means "look at the
+        # release", not "run it again".
+        uses: tanakapayam/actions/python/verify-published@COMMIT_SHA # vX.Y.Z
+        with:
+          dist: dist
+          expect-provenance: "true"

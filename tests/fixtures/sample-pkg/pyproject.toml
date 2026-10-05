@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sample-pkg"
+dynamic = ["version"]
+description = "A tiny package that the tests of tanakapayam/actions build, stage and publish."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.version]
+path = "src/sample_pkg/__init__.py"

@@ -1,0 +1,51 @@
+name: Python rehearsal version
+description: >-
+  Give a rehearsal build a version of its own, such as `1.1.0.dev10101`: below the real release,
+  and new for every run and re-run, so an index that never accepts the same file name twice
+  (TestPyPI) is never asked to. Run it before building.
+
+inputs:
+  file:
+    description: The file that holds the version, relative to the workspace (`src/pkg/__init__.py`).
+    required: true
+  pattern:
+    description: >-
+      A regular expression, matched per line, with one group around the version. The default
+      matches `__version__ = "1.2.3"`; for `pyproject.toml` use `^version = "([^"]+)"$`.
+    default: '^__version__ = "([^"]+)"$'
+  run-number:
+    description: The run number. Defaults to this run's.
+    default: ${{ github.run_number }}
+  run-attempt:
+    description: The attempt number, 1 to 99. Defaults to this run's.
+    default: ${{ github.run_attempt }}
+  write:
+    description: "`true` to also rewrite the version in `file` (do this before building)."
+    default: "true"
+
+outputs:
+  version:
+    description: The rehearsal version.
+    value: ${{ steps.rehearsal.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Make the rehearsal version
+      id: rehearsal
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        VERSION_FILE: ${{ inputs.file }}
+        PATTERN: ${{ inputs.pattern }}
+        RUN_NUMBER: ${{ inputs.run-number }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        WRITE: ${{ inputs.write }}
+      run: |
+        args=(rehearsal-version --file "$VERSION_FILE" --pattern "$PATTERN"
+              --run-number "$RUN_NUMBER" --run-attempt "$RUN_ATTEMPT")
+        if [ "$WRITE" = "true" ]; then args+=(--write); fi
+        version=$(python3 "$ACTION_PATH/../../lib/pyrelease.py" "${args[@]}")
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Rehearsal version: \`$version\`" >> "$GITHUB_STEP_SUMMARY"

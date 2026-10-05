@@ -1,0 +1,28 @@
+name: Verify fingerprint
+description: >-
+  Fail unless a directory of files is exactly what was fingerprinted earlier (usually in the
+  build job). Run it in every job that checks, stages or publishes the files, right after
+  downloading them.
+
+inputs:
+  path:
+    description: The directory (or single file) to check, relative to the workspace.
+    required: true
+  expected:
+    description: >-
+      The fingerprint from `artifact/fingerprint`, normally `needs.build.outputs.<name>`. An
+      empty or malformed value fails, so a skipped or renamed output cannot pass the check by
+      being missing.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check the files are the ones that were fingerprinted
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        TARGET: ${{ inputs.path }}
+        EXPECTED: ${{ inputs.expected }}
+      run: python3 "$ACTION_PATH/../../lib/fingerprint.py" check "$TARGET" "$EXPECTED"

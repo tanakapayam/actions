@@ -1,0 +1,63 @@
+name: Release
+
+# Publishing a GitHub Release is how a version of these actions comes into being: there is
+# nothing to upload, because consumers pin a commit. This workflow checks that the release is
+# one worth pinning, and prints the line to paste into a workflow.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  check:
+    name: Check the release
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read the version from the tag
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::The tag $TAG is not v<major>.<minor>.<patch>."
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Check the changelog
+        uses: ./release/guard
+        with:
+          tag-prefix: v
+          version: ${{ steps.version.outputs.version }}
+          require-date: "true"
+      - name: Check the tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Say what to pin
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          {
+            echo "### Pin this release"
+            echo
+            echo "Consumers pin the commit, with the tag as a comment:"
+            echo
+            echo '```yaml'
+            echo "uses: tanakapayam/actions/release/guard@$GITHUB_SHA # $TAG"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

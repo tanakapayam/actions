@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/tanakapayam/actions/security/advisories/new
+    about: Please report security problems privately, not as an issue.
+  - name: Read the docs first
+    url: https://github.com/tanakapayam/actions/blob/main/docs/failures.md
+    about: Every message the actions print, what it means and what to do about it.

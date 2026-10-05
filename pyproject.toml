@@ -1,0 +1,44 @@
+# Development tooling only: this repository is not a Python package. The actions themselves
+# (see `*/action.yml`) run the standard-library scripts in `lib/` on a GitHub-hosted runner.
+[project]
+name = "tanakapayam-actions-dev"
+version = "0.1.0"
+description = "Development environment for tanakapayam/actions"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pyyaml>=6.0",
+  "ruff>=0.6.0",
+  "mypy>=1.10",
+  "types-PyYAML>=6.0",
+  # to build the fixture package in tests/fixtures without the network
+  "build>=1.2",
+  "hatchling>=1.27",
+  "packaging>=24.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: builds, installs or serves real packages (slower; the sdist install needs the network)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"] # prose uses typographic dashes and quotes
+
+[tool.mypy]
+strict = true
+files = ["lib"]
+python_version = "3.11"

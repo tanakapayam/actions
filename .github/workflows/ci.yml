@@ -1,0 +1,218 @@
+name: CI
+
+# Tests the scripts, lints them and the workflows, and then runs every action for real on a
+# fixture package ("dogfood"): the one thing the local test runner cannot check is how GitHub
+# itself runs a composite action. `all-green` is the single check to require on `main`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # release.yml runs this before it checks a release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the development environment
+        run: uv sync --locked
+      - name: Test
+        run: uv run pytest -ra
+
+  lint:
+    name: Lint and typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install the development environment
+        run: uv sync --locked
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy
+
+  workflows:
+    name: Lint workflows and actions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: actionlint
+        # Pinned here, and kept current by hand: Dependabot does not read `uvx` commands.
+        run: uvx --from actionlint-py==1.7.12.25 actionlint
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx zizmor==1.30.1 --format=plain .
+
+  dogfood:
+    name: Dogfood (every action, run for real)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.13"
+      - name: Build the fixture package
+        run: uv build --out-dir "$RUNNER_TEMP/dist" tests/fixtures/sample-pkg
+
+      - name: Fingerprint the build
+        id: fingerprint
+        uses: ./artifact/fingerprint
+        with:
+          path: ${{ runner.temp }}/dist
+      - name: The same files verify
+        uses: ./artifact/verify-fingerprint
+        with:
+          path: ${{ runner.temp }}/dist
+          expected: ${{ steps.fingerprint.outputs.digest }}
+      - name: Change a copy of the build
+        run: |
+          cp -r "$RUNNER_TEMP/dist" "$RUNNER_TEMP/tampered"
+          files=("$RUNNER_TEMP"/tampered/*)
+          echo "x" >> "${files[0]}"
+      - name: Changed files must not verify
+        id: tampered
+        continue-on-error: true
+        uses: ./artifact/verify-fingerprint
+        with:
+          path: ${{ runner.temp }}/tampered
+          expected: ${{ steps.fingerprint.outputs.digest }}
+      - name: Check that it was refused
+        env:
+          OUTCOME: ${{ steps.tampered.outcome }}
+        run: test "$OUTCOME" = failure
+      - name: An empty fingerprint must not verify
+        id: empty
+        continue-on-error: true
+        uses: ./artifact/verify-fingerprint
+        with:
+          path: ${{ runner.temp }}/dist
+          expected: ""
+      - name: Check that it was refused too
+        env:
+          OUTCOME: ${{ steps.empty.outcome }}
+        run: test "$OUTCOME" = failure
+
+      - name: Stage the build on this Python
+        uses: ./python/verify-install
+        with:
+          dist: ${{ runner.temp }}/dist
+          source-root: tests/fixtures/sample-pkg
+          expect-py-typed: "true"
+          smoke: tests/fixtures/smoke_greets.py
+          python: uv run --no-project python
+
+      - name: Make a rehearsal version
+        id: rehearsal
+        uses: ./python/rehearsal-version
+        with:
+          file: tests/fixtures/sample-pkg/src/sample_pkg/__init__.py
+          write: "false"
+      - name: Check its shape
+        env:
+          VERSION: ${{ steps.rehearsal.outputs.version }}
+        run: |
+          echo "$VERSION"
+          [[ "$VERSION" =~ ^0\.3\.0\.dev[0-9]+$ ]]
+
+      - name: The guard passes a ready release
+        uses: ./release/guard
+        with:
+          tag: v0.3.0
+          tag-prefix: v
+          version: 0.3.0
+          changelog: tests/fixtures/CHANGELOG.md
+          require-date: "true"
+      - name: The guard must refuse an unreleased one
+        id: unreleased
+        continue-on-error: true
+        uses: ./release/guard
+        with:
+          tag: v0.4.0
+          tag-prefix: v
+          version: 0.4.0
+          changelog: tests/fixtures/CHANGELOG.md
+      - name: Check that it was refused
+        env:
+          OUTCOME: ${{ steps.unreleased.outcome }}
+        run: test "$OUTCOME" = failure
+
+      - name: Serve the build as a package index
+        run: |
+          uv run --no-project python tests/fakeindex.py "$RUNNER_TEMP/dist" --port 8765 &
+          for _ in $(seq 1 50); do
+            curl --silent --fail --output /dev/null http://127.0.0.1:8765/pypi/sample-pkg/0.3.0/json && exit 0
+            sleep 0.2
+          done
+          echo "the fake index did not start" >&2
+          exit 1
+      - name: Read the release back from it
+        # The default `python` (python3 on the runner) on purpose: this is what a publish job
+        # that does not set up Python gets.
+        uses: ./python/verify-published
+        with:
+          dist: ${{ runner.temp }}/dist
+          index: http://127.0.0.1:8765
+          dependency-index: http://127.0.0.1:8765/simple/
+          expect-provenance: "true"
+          expect-py-typed: "true"
+          attempts: "5"
+          delay: "1"
+
+  all-green:
+    name: CI passed
+    if: always()
+    needs: [test, lint, workflows, dogfood]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          python3 -c '
+          import json, os, sys
+          needs = json.loads(os.environ["RESULTS"])
+          bad = {name: job["result"] for name, job in needs.items() if job["result"] != "success"}
+          sys.exit(f"not successful: {bad}" if bad else 0)
+          '

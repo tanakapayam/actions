@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build output (the tests build the fixture package into a temporary directory;
+# these are for building it by hand)
+dist/
+build/
+*.egg-info/

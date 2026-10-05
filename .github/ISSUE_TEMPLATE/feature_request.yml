@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a change, or support for another registry or kind of package.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What went wrong, or nearly did, in a release that this should have caught? Concrete is best.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+      description: An input, an action, a message. For another registry, links to its listing and provenance APIs.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Fit
+      options:
+        - label: I read the roadmap, including the "No" list
+          required: true

@@ -1,0 +1,8 @@
+# Configuration for zizmor (run in the `workflows` job of ci.yml).
+rules:
+  self-repository:
+    # zizmor now prefers GitHub's newer `uses: $/path` over `uses: ./path` for this repository's
+    # own actions. `./path` is the long-established form (and needs the checkout that every job
+    # here already does), so it stays until `$/` has been tried on a real run; see
+    # docs/roadmap.md. Remove this once it has.
+    disable: true

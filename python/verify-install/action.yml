@@ -1,0 +1,69 @@
+name: Python verify install
+description: >-
+  The stage of a Python release. Check that the built wheel and sdist hold every file of the
+  package in the source tree, then install each into a fresh virtual environment and smoke-test
+  it. Run it on the exact files that will be uploaded, on every Python you support.
+
+inputs:
+  dist:
+    description: The directory the build left, holding exactly one wheel and at most one sdist.
+    required: true
+  source-root:
+    description: The project root (where `pyproject.toml` is), relative to the workspace.
+    default: "."
+  package-dir:
+    description: The package directory relative to `source-root`. Default `src/<name>`, then `<name>`.
+    default: ""
+  import-name:
+    description: What the package is imported as. Default is the distribution name with `_`.
+    default: ""
+  allow-extra:
+    description: >-
+      Newline-separated globs, relative to the package directory, for files a build adds on
+      purpose and the source tree does not have (a generated `_version.py`).
+    default: ""
+  expect-py-typed:
+    description: "`true` to require `py.typed` in the install."
+    default: "false"
+  smoke:
+    description: >-
+      A Python script to run inside each install, after the built-in checks, with the arguments
+      `<distribution name> <import name> <version>`. A non-zero exit fails the stage.
+    default: ""
+  dependency-index:
+    description: Where dependencies (and an sdist's build backend) are installed from.
+    default: https://pypi.org/simple/
+  python:
+    description: >-
+      The command that runs Python 3.11 or newer; set it to test on a particular version, such as
+      `uv run --no-project python` after setting up uv with that version.
+    default: python3
+
+runs:
+  using: composite
+  steps:
+    - name: Verify the distributions install and run
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PYTHON: ${{ inputs.python }}
+        DIST: ${{ inputs.dist }}
+        SOURCE_ROOT: ${{ inputs.source-root }}
+        PACKAGE_DIR: ${{ inputs.package-dir }}
+        IMPORT_NAME: ${{ inputs.import-name }}
+        ALLOW_EXTRA: ${{ inputs.allow-extra }}
+        EXPECT_PY_TYPED: ${{ inputs.expect-py-typed }}
+        SMOKE: ${{ inputs.smoke }}
+        DEPENDENCY_INDEX: ${{ inputs.dependency-index }}
+      run: |
+        args=(verify-install "$DIST" --source-root "$SOURCE_ROOT" --dependency-index "$DEPENDENCY_INDEX")
+        if [ -n "$PACKAGE_DIR" ]; then args+=(--package-dir "$PACKAGE_DIR"); fi
+        if [ -n "$IMPORT_NAME" ]; then args+=(--import-name "$IMPORT_NAME"); fi
+        if [ "$EXPECT_PY_TYPED" = "true" ]; then args+=(--expect-py-typed); fi
+        if [ -n "$SMOKE" ]; then args+=(--smoke "$SMOKE"); fi
+        while IFS= read -r glob; do
+          if [ -n "$glob" ]; then args+=(--allow-extra "$glob"); fi
+        done <<< "$ALLOW_EXTRA"
+        # $PYTHON is deliberately unquoted: it may be a command with arguments.
+        $PYTHON "$ACTION_PATH/../../lib/pyrelease.py" "${args[@]}"

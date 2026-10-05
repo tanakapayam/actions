@@ -1,0 +1,50 @@
+name: Bug report
+description: An action failed when it should have passed, passed when it should have failed, or the docs are wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Please look at [what each message means](https://github.com/tanakapayam/actions/blob/main/docs/failures.md) first.
+        For a security problem, do not open an issue: see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Release you pinned
+      description: The tag in the comment next to the commit, for example v0.1.0.
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: Which action
+      options:
+        - release/guard
+        - artifact/fingerprint
+        - artifact/verify-fingerprint
+        - python/rehearsal-version
+        - python/verify-install
+        - python/verify-published
+        - A template or the documentation
+    validations:
+      required: true
+  - type: textarea
+    id: step
+    attributes:
+      label: Your workflow step
+      description: The `uses:` step with its `with:` inputs (and the steps around it if they matter).
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: What happened
+      description: The error or the output, from the log or the job summary. What did you expect instead?
+    validations:
+      required: true
+  - type: input
+    id: runner
+    attributes:
+      label: Runner and Python
+      description: For example ubuntu-24.04 and Python 3.13. Anything unusual about the setup helps.

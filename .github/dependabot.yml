@@ -1,0 +1,23 @@
+# Keeps the SHA-pinned actions in .github/workflows/ and the development environment
+# (uv.lock) current. The two linters pinned in ci.yml's `workflows` job are run with
+# `uvx`, which Dependabot cannot see: bump those by hand when it bumps the rest.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7 # a new release is not adopted for a week, long enough for a bad one to be pulled
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      dev-dependencies:
+        patterns: ["*"]

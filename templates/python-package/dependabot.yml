@@ -1,0 +1,12 @@
+# Keeps the SHA-pinned actions in .github/workflows/ current, including tanakapayam/actions.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7 # a new release is not adopted for a week, long enough for a bad one to be pulled
+    groups:
+      actions:
+        patterns: ["*"]

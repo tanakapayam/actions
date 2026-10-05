@@ -1,0 +1,1 @@
+A tiny package that the tests of tanakapayam/actions build, stage and publish. It is named with a hyphen and imported with an underscore on purpose: that is the spelling trap the actions have to get right.

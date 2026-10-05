@@ -1,0 +1,65 @@
+name: Python verify published
+description: >-
+  After uploading to PyPI or TestPyPI, read the release back: wait for the index to list the
+  files, compare its hashes with the files that were built, download them again, install the
+  package from what the index serves and smoke-test it, and (on PyPI) check provenance.
+
+inputs:
+  dist:
+    description: The directory that was uploaded, holding exactly one wheel and at most one sdist.
+    required: true
+  index:
+    description: The index's root, without a trailing slash. `https://test.pypi.org` for TestPyPI.
+    default: https://pypi.org
+  expect-provenance:
+    description: "`true` to require a provenance record for every file (PyPI trusted publishing)."
+    default: "false"
+  attempts:
+    description: How many times to look before giving up; a fresh upload takes a while to appear.
+    default: "20"
+  delay:
+    description: Seconds between attempts.
+    default: "15"
+  import-name:
+    description: What the package is imported as. Default is the distribution name with `_`.
+    default: ""
+  expect-py-typed:
+    description: "`true` to require `py.typed` in the install."
+    default: "false"
+  smoke:
+    description: A Python script to run inside the install; see `python/verify-install`.
+    default: ""
+  dependency-index:
+    description: Where dependencies are installed from (a rehearsal's dependencies are on PyPI).
+    default: https://pypi.org/simple/
+  python:
+    description: The command that runs Python 3.11 or newer.
+    default: python3
+
+runs:
+  using: composite
+  steps:
+    - name: Read the release back from the index
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PYTHON: ${{ inputs.python }}
+        DIST: ${{ inputs.dist }}
+        INDEX: ${{ inputs.index }}
+        EXPECT_PROVENANCE: ${{ inputs.expect-provenance }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        DELAY: ${{ inputs.delay }}
+        IMPORT_NAME: ${{ inputs.import-name }}
+        EXPECT_PY_TYPED: ${{ inputs.expect-py-typed }}
+        SMOKE: ${{ inputs.smoke }}
+        DEPENDENCY_INDEX: ${{ inputs.dependency-index }}
+      run: |
+        args=(verify-published "$DIST" --index "$INDEX" --attempts "$ATTEMPTS" --delay "$DELAY"
+              --dependency-index "$DEPENDENCY_INDEX")
+        if [ "$EXPECT_PROVENANCE" = "true" ]; then args+=(--expect-provenance); fi
+        if [ -n "$IMPORT_NAME" ]; then args+=(--import-name "$IMPORT_NAME"); fi
+        if [ "$EXPECT_PY_TYPED" = "true" ]; then args+=(--expect-py-typed); fi
+        if [ -n "$SMOKE" ]; then args+=(--smoke "$SMOKE"); fi
+        # $PYTHON is deliberately unquoted: it may be a command with arguments.
+        $PYTHON "$ACTION_PATH/../../lib/pyrelease.py" "${args[@]}"

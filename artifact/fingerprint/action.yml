@@ -1,0 +1,29 @@
+name: Fingerprint
+description: >-
+  Fingerprint a directory of build outputs, so that later jobs can check they are handling
+  exactly those files. The fingerprint covers every file's name and content.
+
+inputs:
+  path:
+    description: The directory (or single file) to fingerprint, relative to the workspace.
+    required: true
+
+outputs:
+  digest:
+    description: The fingerprint, `sha256-` and 64 hex digits. Pass it to `artifact/verify-fingerprint`.
+    value: ${{ steps.digest.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Fingerprint the files
+      id: digest
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        TARGET: ${{ inputs.path }}
+      run: |
+        digest=$(python3 "$ACTION_PATH/../../lib/fingerprint.py" digest "$TARGET")
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        echo "Fingerprint of \`$TARGET\`: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
