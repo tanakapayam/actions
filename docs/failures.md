@@ -24,7 +24,7 @@ Messages show `<placeholders>` where a value goes.
 | `<path> holds no files, so there is nothing to fingerprint.` | The directory is empty. | The build produced nothing, or the download failed. |
 | `<item> is a symbolic link; a fingerprint covers real files.` | A symlink is among the files. | Fingerprint a directory of real files. |
 | `'<value>' is not a fingerprint (expected sha256- and 64 hex digits); was the step that produces it skipped?` | `expected` is empty or malformed, almost always an output that was never set. | Check the output's name in `needs.<job>.outputs`, and that the job that fingerprints ran. |
-| `The files are not the ones that were fingerprinted (expected <digest>, here <digest>).` | The files changed since the fingerprint was made. | Never re-run only the failed job to "fix" this: rebuild from the start. |
+| `The files are not the ones that were fingerprinted (expected <digest>, here <digest>).` | The files changed since the fingerprint was made. The log lists the files counted here and any hidden files left out. | Compare that list with the one the fingerprint step printed (also on its summary page): the file in one and not the other is the difference. If it is a hidden file, set `include-hidden: "true"` on both actions and `include-hidden-files: true` on the upload. Otherwise never re-run only the failed job to "fix" this: rebuild from the start. |
 
 ## `python/verify-install` (the stage)
 

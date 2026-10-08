@@ -56,6 +56,17 @@ jobs:
           expected: ${{ needs.build.outputs.fingerprint }}
 ```
 
+Hidden files (names that begin with a dot) are not part of the fingerprint, because
+`actions/upload-artifact` leaves them out by default and `uv build` leaves a `.gitignore` in its
+output. If you do upload them (`include-hidden-files: true`), count them on both sides:
+
+```yaml
+- uses: tanakapayam/actions/artifact/fingerprint@<commit> # v0.1.0
+  with:
+    path: site
+    include-hidden: "true"
+```
+
 ## The stage with your own smoke test
 
 The built-in check proves a package installs and imports. A script of yours proves it *works*:

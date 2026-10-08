@@ -129,6 +129,20 @@ def test_ci_runs_every_action_for_real_in_the_dogfood_job():
     )
 
 
+def test_dogfood_fingerprints_across_a_real_upload_and_download():
+    # A fingerprint that survives only in the job that made it is worthless. This was found by a
+    # consumer's first dry run: `uv build` leaves a hidden .gitignore that an upload drops.
+    ci = load(ROOT / ".github" / "workflows" / "ci.yml")
+    names = [str(step.get("uses", "")).split("@")[0] for step in jobs(ci)["dogfood"]["steps"]]
+    fingerprint = names.index("./artifact/fingerprint")
+    upload = names.index("actions/upload-artifact")
+    download = names.index("actions/download-artifact")
+    after = names.index("./artifact/verify-fingerprint", download)
+    assert fingerprint < upload < download < after
+    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "Leave a hidden file in the build" in text and "test ! -e" in text
+
+
 def test_the_release_workflow_checks_the_tag_with_the_guard_it_ships():
     release = load(ROOT / ".github" / "workflows" / "release.yml")
     assert release["on"] == {"release": {"types": ["published"]}}

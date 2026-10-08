@@ -11,7 +11,7 @@ An action that publishes software has to be trusted before its first real run, a
 | **Usability tests** | `tests/test_usability.py` | What a person sees: every option has help text, messages read like sentences, an index that is out of reach is waited for and not a traceback, and a pass or a failure is on the run's summary page. |
 | **Documentation tests** | `tests/test_docs.py` | Every YAML example uses real inputs, the catalogue in `docs/failures.md` lists every message in `lib/`, and the pieces a newcomer looks for (quick start, requirements, support, issue forms) exist. |
 | **Linters** | `ci.yml`, job `workflows`; `tests/test_shell.py` | `actionlint` (which runs ShellCheck on workflow scripts) and `zizmor` on the workflows and the actions, and ShellCheck on the scripts inside each `action.yml`, which `actionlint` does not read. |
-| **Dogfood** | `ci.yml`, job `dogfood` | Every action runs for real, on GitHub, against a fixture package and a local index. |
+| **Dogfood** | `ci.yml`, job `dogfood` | Every action runs for real, on GitHub, against a fixture package and a local index, including a real upload and download of the artifact (with a hidden file in the build) to check that a fingerprint survives the trip between jobs. |
 
 ## The action runner (`tests/actionrun.py`)
 

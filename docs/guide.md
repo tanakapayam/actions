@@ -114,7 +114,7 @@ Every message the actions print is explained, with what to do, in [What a failur
 | `The release tag v1.2.3 does not match the package version (v1.2.4)` | The tag and the code disagree. Fix whichever is wrong; a tag cannot be moved after publishing a release. |
 | `has no entry for 1.2.3` / `still marks 1.2.3 as Unreleased` | The changelog heading is missing or undated. |
 | `'' is not a fingerprint ... was the step that produces it skipped?` | `needs.build.outputs.<name>` is empty: the output name does not match, or the build job did not run its fingerprint step. |
-| `The files are not the ones that were fingerprinted` | The artifact changed between build and now. Never "fix" this by re-running only the failed job; rebuild. |
+| `The files are not the ones that were fingerprinted` | The artifact changed between build and now. The log lists the files counted: compare it with the fingerprint step's list. A hidden file (a build's `.gitignore`) is not counted by default, on purpose; if you upload hidden files, see `include-hidden`. Otherwise never "fix" this by re-running only the failed job; rebuild. |
 | `the wheel is missing mypkg/foo.py` | The build left a source file out: a packaging include/exclude rule, or `.gitignore` caught it. |
 | `the wheel has mypkg/_version.py, which is not in the source tree` | A generated file; add it to `allow-extra`. |
 | `cannot find the package ... tried src/mypkg, mypkg` | Set `package-dir`. |

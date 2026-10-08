@@ -1,12 +1,21 @@
 name: Fingerprint
 description: >-
   Fingerprint a directory of build outputs, so that later jobs can check they are handling
-  exactly those files. The fingerprint covers every file's name and content.
+  exactly those files. The fingerprint covers the name and content of every file, except hidden
+  ones unless asked (see `include-hidden`).
 
 inputs:
   path:
     description: The directory (or single file) to fingerprint, relative to the workspace.
     required: true
+  include-hidden:
+    description: >-
+      `true` to also count files and directories whose names begin with a dot. By default they are not
+      counted, because `actions/upload-artifact` leaves them out unless told otherwise, and some builders
+      leave one behind (`uv build` writes a `.gitignore` into its output directory), so counting them would
+      make a fingerprint that never survives an upload and a download. Set it the same on both actions,
+      and set `include-hidden-files: true` on the upload.
+    default: "false"
 
 outputs:
   digest:
@@ -23,7 +32,10 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         TARGET: ${{ inputs.path }}
+        INCLUDE_HIDDEN: ${{ inputs.include-hidden }}
       run: |
-        digest=$(python3 "$ACTION_PATH/../../lib/fingerprint.py" digest "$TARGET")
+        args=(digest "$TARGET")
+        if [ "$INCLUDE_HIDDEN" = "true" ]; then args+=(--include-hidden); fi
+        digest=$(python3 "$ACTION_PATH/../../lib/fingerprint.py" "${args[@]}")
         echo "digest=$digest" >> "$GITHUB_OUTPUT"
         echo "Fingerprint of \`$TARGET\`: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"

@@ -54,6 +54,10 @@ The actions need no secrets and no token, and nothing in them writes anywhere bu
 
 A tag can be moved and a branch always moves; a commit cannot. For something that sits in your release pipeline, "exactly this code" is the right guarantee. Keep the version as a comment (`# v0.1.0`) and let Dependabot propose updates, which it will, as a pull request with the changelog.
 
+## Why isn't a hidden file such as `.gitignore` counted in the fingerprint?
+
+Because it would not survive the trip. `actions/upload-artifact` leaves hidden files out of an artifact unless you say `include-hidden-files: true`, and `uv build` leaves a `.gitignore` in its output directory. A fingerprint that counted it would match in the job that built and never in the job that checks. If you do upload hidden files, set `include-hidden: "true"` on both fingerprint actions and `include-hidden-files: true` on the upload.
+
 ## What if the read-back is red?
 
 Do not re-run it. The upload is done and cannot be undone. See [the guide](guide.md#if-the-read-back-is-red) and [what each message means](failures.md).

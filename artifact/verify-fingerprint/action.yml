@@ -14,6 +14,14 @@ inputs:
       empty or malformed value fails, so a skipped or renamed output cannot pass the check by
       being missing.
     required: true
+  include-hidden:
+    description: >-
+      `true` to also count files and directories whose names begin with a dot. By default they are not
+      counted, because `actions/upload-artifact` leaves them out unless told otherwise, and some builders
+      leave one behind (`uv build` writes a `.gitignore` into its output directory), so counting them would
+      make a fingerprint that never survives an upload and a download. Set it the same on both actions,
+      and set `include-hidden-files: true` on the upload.
+    default: "false"
 
 runs:
   using: composite
@@ -25,4 +33,8 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         TARGET: ${{ inputs.path }}
         EXPECTED: ${{ inputs.expected }}
-      run: python3 "$ACTION_PATH/../../lib/fingerprint.py" check "$TARGET" "$EXPECTED"
+        INCLUDE_HIDDEN: ${{ inputs.include-hidden }}
+      run: |
+        args=(check "$TARGET" "$EXPECTED")
+        if [ "$INCLUDE_HIDDEN" = "true" ]; then args+=(--include-hidden); fi
+        python3 "$ACTION_PATH/../../lib/fingerprint.py" "${args[@]}"

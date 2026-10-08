@@ -40,12 +40,13 @@ It fails unless: there is a release tag; the version is not empty; the tag is ex
 
 ## `artifact/fingerprint`
 
-Fingerprints a directory of build outputs. The fingerprint is `sha256-` followed by the SHA-256 of a manifest: one `<sha256>  <relative path>` line per file, sorted by path. It changes if any byte, any name, or the set of files changes. An empty directory, a missing path or a symbolic link is an error, not a fingerprint of nothing. Pass the output to the downstream jobs through `jobs.<id>.outputs`.
+Fingerprints a directory of build outputs. The fingerprint is `sha256-` followed by the SHA-256 of a manifest: one `<sha256>  <relative path>` line per file, sorted by path. It changes if any byte, any name, or the set of files changes. **Hidden files are not counted** (names that begin with a dot, at any depth) unless `include-hidden` is `"true"`: `actions/upload-artifact` leaves them out of an artifact by default, and `uv build` leaves a `.gitignore` in its output directory, so a fingerprint that counted them would never survive the trip from the job that builds to the job that checks. The log and the job summary list the files that were counted, so two jobs' views can be compared. An empty directory, a missing path or a symbolic link is an error, not a fingerprint of nothing. Pass the output to the downstream jobs through `jobs.<id>.outputs`.
 
 <!-- generated:artifact/fingerprint -->
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `path` | yes | none | The directory (or single file) to fingerprint, relative to the workspace. |
+| `include-hidden` | no | `false` | `true` to also count files and directories whose names begin with a dot. By default they are not counted, because `actions/upload-artifact` leaves them out unless told otherwise, and some builders leave one behind (`uv build` writes a `.gitignore` into its output directory), so counting them would make a fingerprint that never survives an upload and a download. Set it the same on both actions, and set `include-hidden-files: true` on the upload. |
 
 | Output | Description |
 | --- | --- |
@@ -54,13 +55,14 @@ Fingerprints a directory of build outputs. The fingerprint is `sha256-` followed
 
 ## `artifact/verify-fingerprint`
 
-Fails unless a directory is exactly what was fingerprinted. Run it right after every download of the artifact: in the staging job, and again in each publishing job. `expected` must look like a fingerprint, so an output that was never set (a skipped build, a renamed output) is an error and cannot make the check pass by being empty.
+Fails unless a directory is exactly what was fingerprinted, counting hidden files the same way the fingerprint did (`include-hidden` must match). On a mismatch it prints the files it counted and the hidden files it left out, to compare with the list the fingerprint step printed. Run it right after every download of the artifact: in the staging job, and again in each publishing job. `expected` must look like a fingerprint, so an output that was never set (a skipped build, a renamed output) is an error and cannot make the check pass by being empty.
 
 <!-- generated:artifact/verify-fingerprint -->
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `path` | yes | none | The directory (or single file) to check, relative to the workspace. |
 | `expected` | yes | none | The fingerprint from `artifact/fingerprint`, normally `needs.build.outputs.<name>`. An empty or malformed value fails, so a skipped or renamed output cannot pass the check by being missing. |
+| `include-hidden` | no | `false` | `true` to also count files and directories whose names begin with a dot. By default they are not counted, because `actions/upload-artifact` leaves them out unless told otherwise, and some builders leave one behind (`uv build` writes a `.gitignore` into its output directory), so counting them would make a fingerprint that never survives an upload and a download. Set it the same on both actions, and set `include-hidden-files: true` on the upload. |
 <!-- /generated -->
 
 ## `python/rehearsal-version`

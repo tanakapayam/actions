@@ -21,7 +21,7 @@ These actions are the steps that make each of those impossible to miss.
 ```
 
 1. **Build once and promote unchanged.** The distributions are built a single time and uploaded as an artifact. Every later job downloads that artifact; nothing is ever rebuilt.
-2. **Fingerprint.** Right after the build, the files get a fingerprint: one digest of every name and every byte. Every job that touches the files downloads them and *verifies the fingerprint first*, so "what was checked" and "what is uploaded" are the same bytes by construction, not by hope.
+2. **Fingerprint.** Right after the build, the files get a fingerprint: one digest of every name and every byte (hidden files aside: an upload leaves them out). Every job that touches the files downloads them and *verifies the fingerprint first*, so "what was checked" and "what is uploaded" are the same bytes by construction, not by hope.
 3. **Stage.** Registries like npm can stage a package somewhere harmless and install it back. PyPI cannot: GitHub Packages has no PyPI registry, and TestPyPI never accepts a file name twice, so it would burn the real version. So the *stage is the checks themselves*, run on the exact files that will be uploaded: do they hold every module in the source tree, and do they install and run from a clean environment, on every Python you support?
 4. **Approve.** A person decides, after the stage is green, behind a protected environment. This is a repository setting, not something an action can do for you.
 5. **Publish, then read back.** The upload is the only step that cannot be undone, so it is followed by looking at the result the way a user would: does the index list the version, with the hashes that were built? Do the URLs serve those bytes? Does `pip` resolve and install them? Is there provenance? A red read-back means *look at the release*, never *run it again*.
@@ -57,7 +57,7 @@ Every check is written so that the absence of a thing is a failure, not a pass:
 
 | Term            | Meaning                                                                                                           |
 | --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **Fingerprint** | `sha256-` plus the SHA-256 of a manifest of `<sha256>  <path>` lines; covers names, content and the set of files. |
+| **Fingerprint** | `sha256-` plus the SHA-256 of a manifest of `<sha256>  <path>` lines; covers names, content and the set of files, not hidden ones unless asked. |
 | **Stage**       | The checks on the exact files to be uploaded, before anyone approves.                                             |
 | **Read back**   | Looking at what the index now serves, after the upload, as a user would.                                          |
 | **Rehearsal**   | A run that goes through the whole pipeline without producing a real release.                                      |

@@ -307,3 +307,44 @@ def test_every_action_runs_from_the_workspace_whatever_the_jobs_default_director
         **shape,
     )
     assert guarded.ok, guarded.stderr  # CHANGELOG.md is in the workspace, not in `elsewhere`
+
+
+# --- hidden files across an upload and a download ------------------------------------------------
+
+
+def test_a_build_with_a_hidden_file_verifies_after_the_hidden_file_is_gone(workspace, files):
+    # What upload-artifact then download-artifact do to `uv build`'s output directory.
+    (files / ".gitignore").write_text("*\n", encoding="utf-8")
+    built = fingerprint(workspace)
+    assert built.ok, built.stderr
+    (files / ".gitignore").unlink()
+    assert verify(workspace, built.outputs["digest"]).ok
+
+
+def test_the_build_job_lists_the_files_it_counted_in_its_log_and_summary(workspace, files):
+    (files / ".gitignore").write_text("*\n", encoding="utf-8")
+    result = fingerprint(workspace)
+    assert "2 file(s) counted" in result.stderr and "a.txt" in result.stderr
+    assert "1 hidden file(s) not counted" in result.stderr and ".gitignore" in result.stderr
+    assert "Files counted in the fingerprint" in result.summary
+
+
+def test_include_hidden_counts_them_on_both_sides_and_must_match(workspace, files):
+    (files / ".gitignore").write_text("*\n", encoding="utf-8")
+    counted = actionrun.run_action(
+        ROOT / "artifact" / "fingerprint",
+        {"path": "out", "include-hidden": "true"},
+        cwd=workspace,
+    )
+    assert counted.ok, counted.stderr
+    both = actionrun.run_action(
+        ROOT / "artifact" / "verify-fingerprint",
+        {"path": "out", "expected": counted.outputs["digest"], "include-hidden": "true"},
+        cwd=workspace,
+    )
+    assert both.ok, both.stderr
+    one_side = verify(workspace, counted.outputs["digest"])  # the default: hidden not counted
+    assert not one_side.ok
+    assert "hidden file(s) not counted" in one_side.stderr
+    assert "include-hidden-files: true" in one_side.stderr
+    assert "### ❌ Fingerprint check failed" in one_side.summary
