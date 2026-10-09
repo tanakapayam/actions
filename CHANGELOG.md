@@ -6,6 +6,12 @@ A release is a Git tag `vMAJOR.MINOR.PATCH`. Consumers pin the commit, not the t
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-09
+
+### Changed
+
+- The read-back's retry lines read like retries. `download: ERROR: No matching distribution found ... (attempt 1 of 20)`, which is what a real TestPyPI upload printed while the index's simple page caught up with its JSON page, looked like a failure. It is now `download: not yet: No matching distribution found ... (attempt 1 of 20; looking again in 15s)`, pip's `ERROR:` prefix is dropped from a retry, and `download: there on attempt 2 of 20` says when it got there.
+
 ## [0.1.1] - 2026-10-08
 
 ### Fixed

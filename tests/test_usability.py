@@ -156,7 +156,7 @@ def test_an_index_that_never_answers_is_a_clear_failure_after_the_attempts(tmp_p
             smoke_file=None,
         )
     assert "listing: still not there after 2 attempts: cannot reach" in str(caught.value)
-    assert "attempt 1 of 2" in capsys.readouterr().out
+    assert "(attempt 1 of 2; looking again in 0s)" in capsys.readouterr().out
 
 
 def test_an_index_that_comes_back_is_waited_for(tmp_path, monkeypatch, capsys):
@@ -181,8 +181,12 @@ def test_an_index_that_comes_back_is_waited_for(tmp_path, monkeypatch, capsys):
             smoke_file=None,
         )
     out = capsys.readouterr().out
-    assert "cannot reach the index: Connection reset (attempt 1 of 3)" in out
-    assert f"lists no {dists.project} {dists.version} yet (attempt 2 of 3)" in out
+    assert "listing: not yet: cannot reach the index: Connection reset" in out
+    assert "(attempt 1 of 3; looking again in 0s)" in out
+    assert (
+        f"lists no {dists.project} {dists.version} yet (attempt 2 of 3; looking again in 0s)" in out
+    )
+    assert out.splitlines()[-1].endswith("yet (attempt 3 of 3)")  # the last look promises nothing
 
 
 # --- the run's summary page ----------------------------------------------------------------------
@@ -231,3 +235,47 @@ def test_summarize_appends_separated_markdown(tmp_path, summary):
     pyrelease.summarize("### one", "", "- a")
     pyrelease.summarize("### two")
     assert summary.read_text(encoding="utf-8") == "### one\n\n- a\n\n### two\n\n"
+
+
+# --- a retry reads like a retry, not like a failure ----------------------------------------------
+
+
+def test_a_not_yet_line_says_not_yet_and_when_it_will_look_again(monkeypatch, capsys):
+    outcomes = iter(["No matching distribution found for x==1", None])
+    monkeypatch.setattr(pyrelease.time, "sleep", lambda seconds: None)
+    pyrelease.retrying("download", lambda: next(outcomes), attempts=20, delay=15)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == [
+        "download: not yet: No matching distribution found for x==1 "
+        "(attempt 1 of 20; looking again in 15s)",
+        "download: there on attempt 2 of 20",
+    ]
+
+
+def test_a_first_try_success_prints_nothing_extra(monkeypatch, capsys):
+    pyrelease.retrying("listing", lambda: None, attempts=20, delay=15)
+    assert capsys.readouterr().out == ""
+
+
+def test_the_last_attempt_does_not_promise_another_look(monkeypatch, capsys):
+    monkeypatch.setattr(pyrelease.time, "sleep", lambda seconds: None)
+    with pytest.raises(pyrelease.ReleaseError, match="still not there after 2 attempts"):
+        pyrelease.retrying("install", lambda: "still no", attempts=2, delay=15)
+    last = capsys.readouterr().out.splitlines()[-1]
+    assert last == "install: not yet: still no (attempt 2 of 2)"
+
+
+@pytest.mark.parametrize(
+    ("stderr", "shown"),
+    [
+        (
+            "ERROR: No matching distribution found for conclude==1.1.0.dev2501\n",
+            "No matching distribution found for conclude==1.1.0.dev2501",
+        ),
+        ("noise\nERROR: Could not find a version\n", "Could not find a version"),
+        ("a line without the prefix", "a line without the prefix"),
+        ("", "pip failed"),
+    ],
+)
+def test_pips_error_prefix_is_not_shown_in_the_middle_of_a_retry(stderr, shown):
+    assert pyrelease.last_line(stderr) == shown

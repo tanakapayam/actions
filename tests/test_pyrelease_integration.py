@@ -134,7 +134,22 @@ def test_a_release_the_index_serves_faithfully_passes(dist, capsys):
 def test_a_release_that_takes_a_while_to_appear_is_waited_for(dist, capsys):
     with FakeIndex(dist, lag=2) as index:
         published(dist, index, attempts=5)
-    assert "lists no sample-pkg 0.3.0 yet (attempt 2 of 5)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "listing: not yet: " in out and "lists no sample-pkg 0.3.0 yet" in out
+    assert "(attempt 2 of 5; looking again in 0s)" in out
+    assert "listing: there on attempt 3 of 5" in out
+
+
+def test_a_simple_page_that_lags_behind_the_json_is_waited_for_and_reads_like_a_wait(dist, capsys):
+    # What a real TestPyPI upload did: the JSON page listed the release, then `pip download` found
+    # "No matching distribution" for one attempt, because the simple page caught up a moment later.
+    with FakeIndex(dist, simple_lag=1) as index:
+        published(dist, index, attempts=5)
+    out = capsys.readouterr().out
+    assert "download: not yet: No matching distribution found for sample-pkg==0.3.0" in out
+    assert "ERROR:" not in out and "looking again in 0s" in out
+    assert "download: there on attempt 2 of 5" in out
+    assert "install:" in out  # and then it carried on to the install
 
 
 def test_a_release_that_never_appears_is_an_error_naming_what_is_missing(dist):

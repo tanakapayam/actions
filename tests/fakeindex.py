@@ -36,6 +36,7 @@ class FakeIndex:
         *,
         port: int = 0,
         lag: int = 0,
+        simple_lag: int = 0,
         wrong_listed_hash: Iterable[str] = (),
         tampered_bytes: Iterable[str] = (),
         unlisted: Iterable[str] = (),
@@ -44,6 +45,10 @@ class FakeIndex:
         self.dists = pyrelease.find_dists(dist)
         self.files = {path.name: path.read_bytes() for path in self.dists.files}
         self.lag = lag  # how many times the release's JSON answers 404 before it is listed
+        # How many times the simple page pip reads answers 404 *after* the JSON lists the release:
+        # a real index's pages catch up with an upload one at a time.
+        self.simple_lag = simple_lag
+        self._simple_requests = 0
         self.wrong_listed_hash = set(wrong_listed_hash)
         self.tampered_bytes = set(tampered_bytes)
         self.unlisted = set(unlisted)
@@ -115,6 +120,9 @@ class FakeIndex:
                     ]
                     return self.reply(200, json.dumps({"urls": urls}).encode())
                 if path in (f"/simple/{project}/", f"/simple/{project}"):
+                    index._simple_requests += 1
+                    if index._simple_requests <= index.simple_lag:
+                        return self.reply(404)
                     links = "".join(
                         f'<a href="{index.url}/files/{name}#sha256={index.listed_digest(name)}">'
                         f"{name}</a><br>"

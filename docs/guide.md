@@ -59,6 +59,8 @@ Run it again with target `testpypi`. After the stage, the build uploads to TestP
 pip install -i https://test.pypi.org/simple/ "mypkg==1.2.3.dev4201"
 ```
 
+In the log, a line that says `not yet:` is the check waiting for the index, not a failure: a fresh upload appears on the index's pages one at a time, so you may see one or two before `there on attempt 2`. Only `still not there after N attempts` is a failure.
+
 If your package has dependencies, TestPyPI will not have them: the read-back installs them from PyPI (`dependency-index`, the default), but your own `pip install` needs `--extra-index-url https://pypi.org/simple/`.
 
 ## 5. Release

@@ -250,8 +250,10 @@ def pip(python: Path, *arguments: str | Path) -> subprocess.CompletedProcess[str
 
 
 def last_line(text: str) -> str:
+    """The last line of pip's complaint, without its own ``ERROR:`` prefix: shown as the reason a
+    step is not there *yet*, an ``ERROR:`` in the middle of a retry reads like a failure."""
     lines = text.strip().splitlines()
-    return lines[-1] if lines else "pip failed"
+    return re.sub(r"^ERROR:\s*", "", lines[-1]) if lines else "pip failed"
 
 
 def smoke(
@@ -397,11 +399,18 @@ def retrying(
     for number in range(1, attempts + 1):
         outcome = attempt()
         if outcome is None:
+            if number > 1:
+                print(f"{description}: there on attempt {number} of {attempts}")
             return
         reason = outcome
-        print(f"{description}: {reason} (attempt {number} of {attempts})")
         if number < attempts:
+            print(
+                f"{description}: not yet: {reason} "
+                f"(attempt {number} of {attempts}; looking again in {delay:g}s)"
+            )
             time.sleep(delay)
+        else:
+            print(f"{description}: not yet: {reason} (attempt {number} of {attempts})")
     raise ReleaseError(f"{description}: still not there after {attempts} attempts: {reason}")
 
 

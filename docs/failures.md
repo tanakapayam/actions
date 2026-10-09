@@ -53,7 +53,9 @@ Messages show `<placeholders>` where a value goes.
 
 ## `python/verify-published` (the read-back)
 
-Some lines are *not yet*, printed as `<step>: <reason> (attempt <n> of <m>)` while it waits:
+Some lines are *not yet*. They are printed as `<step>: not yet: <reason> (attempt <n> of <m>; looking again in <s>s)` while it waits, and `<step>: there on attempt <n> of <m>` when the step gets there after one or more of them. A `not yet` line is not a failure: a fresh upload shows up on the index's pages, and then on the one `pip` reads, a little at a time.
+
+The reasons:
 
 | Reason | It means |
 | ------ | -------- |
