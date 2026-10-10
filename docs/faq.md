@@ -52,7 +52,7 @@ The actions need no secrets and no token, and nothing in them writes anywhere bu
 
 ## Why pin a commit and not a tag, or `@main`?
 
-A tag can be moved and a branch always moves; a commit cannot. For something that sits in your release pipeline, "exactly this code" is the right guarantee. Keep the version as a comment (`# v0.1.0`) and let Dependabot propose updates, which it will, as a pull request with the changelog.
+A tag can be moved and a branch always moves; a commit cannot. For something that sits in your release pipeline, "exactly this code" is the right guarantee. Keep the version as a comment (`# v0.1.3`) and let Dependabot propose updates, which it will, as a pull request with the changelog.
 
 ## Why isn't a hidden file such as `.gitignore` counted in the fingerprint?
 

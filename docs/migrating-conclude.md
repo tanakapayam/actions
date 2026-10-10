@@ -2,7 +2,7 @@
 
 [conclude](https://github.com/tanakapayam/conclude) is where these actions came from, so it is also the first consumer. Its three publish workflows each carry their own copy of the same ideas; this maps every copy to the action that replaces it, in the order that is safe to do it.
 
-The conclude migration changes release plumbing, not the package, so it ships as plain commits with a dry run to prove each one. Pin commits only after this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.1.0 'v0.1.0^{}' | tail -n1 | cut -f1`).
+The conclude migration changes release plumbing, not the package, so it ships as plain commits with a dry run to prove each one. Pin commits only after this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1`).
 
 ## Python (`python-publish.yml`)
 
@@ -57,12 +57,12 @@ stage:
   # ...matrix and setup as today...
   steps:
     - name: Check these are exactly the distributions that were built
-      uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.1.0
+      uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.1.3
       with:
         path: ${{ runner.temp }}/dist
         expected: ${{ needs.build.outputs.integrity }}
     - name: Install them into clean environments and smoke-test
-      uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+      uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
       with:
         dist: ${{ runner.temp }}/dist
         source-root: python
@@ -75,7 +75,7 @@ and in `publish-pypi`, after the upload:
 
 ```yaml
 - name: Install the release back from PyPI and check it
-  uses: tanakapayam/actions/python/verify-published@<commit> # v0.1.0
+  uses: tanakapayam/actions/python/verify-published@<commit> # v0.1.3
   with:
     dist: dist
     expect-provenance: "true"
@@ -94,21 +94,21 @@ Only the generic pieces move now:
 
 ## Applying the prepared change
 
-The Python, Node and Bash workflows, `python/scripts/smoke.py`, conclude's staged-pipeline tests and `python/RELEASING.md` come as one prepared change, with the actions pinned as `@COMMIT_SHA # vX.Y.Z` placeholders. Once `v0.1.0` of this repository is released:
+The Python, Node and Bash workflows, `python/scripts/smoke.py`, conclude's staged-pipeline tests and `python/RELEASING.md` come as one prepared change, with the actions pinned as `@COMMIT_SHA # vX.Y.Z` placeholders. Once `v0.1.3` of this repository is released:
 
 ```
 # from the root of the conclude repository
 unzip -o conclude-migration.zip
 git rm python/scripts/release.py python/test/test_release_script.py
-SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.0 'v0.1.0^{}' | tail -n1 | cut -f1)
-test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.0/" .github/workflows/*.yml
+SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1)
+test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" .github/workflows/*.yml
 ```
 
 (on macOS, `sed -i ''`). Until the placeholders are replaced, conclude's own pin test fails, on purpose: nothing unpinned can be merged. Then run the Python workflow as `dry-run`, then `testpypi`.
 
 ## Order of work
 
-1. Release `v0.1.0` of this repository (see [RELEASING.md](../RELEASING.md)); note the commit.
+1. Release `v0.1.3` of this repository (see [RELEASING.md](../RELEASING.md)); note the commit.
 2. In conclude, replace the Python guard and the fingerprint steps; run the workflow as `dry-run`.
 3. Replace the stage with `python/verify-install`; `dry-run` again.
 4. Replace the two read-backs, run as `testpypi` (rehearsal), then release for real.

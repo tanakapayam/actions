@@ -10,7 +10,7 @@ They were extracted from the release pipelines of [conclude](https://github.com/
 ```yaml
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.0
+  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -32,7 +32,7 @@ Anyone who publishes a package from GitHub Actions and would like "it shipped" t
 ```yaml
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.0
+  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -87,7 +87,7 @@ Each action is a few lines of `bash` around a standard-library Python script in 
 Pin the **commit**, with the tag as a comment, as for any third-party action:
 
 ```yaml
-- uses: tanakapayam/actions/python/verify-install@<40-hex commit of the release> # v0.1.0
+- uses: tanakapayam/actions/python/verify-install@<40-hex commit of the release> # v0.1.3
   with:
     dist: dist
 ```

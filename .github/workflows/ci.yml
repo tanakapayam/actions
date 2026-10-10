@@ -5,7 +5,9 @@ name: CI
 # itself runs a composite action. `all-green` is the single check to require on `main`.
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - ci-*
   pull_request:
   workflow_call: # release.yml runs this before it checks a release
 

@@ -4,14 +4,15 @@ name: Publish to PyPI
 # Search for EDIT and change each one; see docs/guide.md for what every part is for.
 #
 # Pin every `tanakapayam/actions/...` line to a commit, with the release tag as a comment:
-#   uses: tanakapayam/actions/release/guard@<40-hex commit> # v0.1.0
+#   uses: tanakapayam/actions/release/guard@<40-hex commit> # v0.1.3
 # (the release's workflow run prints the line to paste). Dependabot keeps them current.
 #
 #   build    builds once and fingerprints the files
 #   stage    on every Python you support: the files are still the built ones, hold the whole
 #            package, and install and run from clean environments
 #   publish  waits for approval, re-checks the fingerprint, uploads, then installs the release
-#            back from the index and compares hashes (and, on PyPI, provenance)
+#            back from the index and compares hashes and provenance (a rehearsal on TestPyPI
+#            checks them too, so it is the real thing in everything but the version number)
 #
 # A manual run defaults to `dry-run`: build and stage, upload nothing.
 on:
@@ -153,6 +154,7 @@ jobs:
         with:
           dist: dist
           index: https://test.pypi.org
+          expect-provenance: "true"
 
   publish-pypi:
     name: Publish to PyPI

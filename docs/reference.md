@@ -4,7 +4,7 @@ Every action, its inputs and outputs, and what a failure looks like. The tables 
 
 Conventions common to all of them:
 
-- **Pin by commit.** `uses: tanakapayam/actions/<path>@<40-hex commit> # v0.1.0`.
+- **Pin by commit.** `uses: tanakapayam/actions/<path>@<40-hex commit> # v0.1.3`.
 - **Paths** are relative to the workspace (`$GITHUB_WORKSPACE`) unless absolute, such as `${{ runner.temp }}/dist` or `packages/foo/dist`. Every step of every action sets its own `working-directory` to the workspace root, so a job's `defaults.run.working-directory` (a monorepo's `python/`, say) never changes what a path means.
 - **Booleans are the strings** `"true"` and `"false"`, because every input is a string.  Quote them in YAML (`expect-provenance: "true"`).
 - **Failures** are a GitHub `::error::` annotation with a reason, and a failed step.
@@ -32,7 +32,7 @@ It fails unless: there is a release tag; the version is not empty; the tag is ex
   run: echo "version=$(python -c 'import mypkg; print(mypkg.__version__)')" >> "$GITHUB_OUTPUT"
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.0
+  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -127,7 +127,7 @@ Not-yet-there answers (the index and its CDN lag behind an upload) are retried: 
 | --- | --- | --- | --- |
 | `dist` | yes | none | The directory that was uploaded, holding exactly one wheel and at most one sdist. |
 | `index` | no | `https://pypi.org` | The index's root, without a trailing slash. `https://test.pypi.org` for TestPyPI. |
-| `expect-provenance` | no | `false` | `true` to require a provenance record for every file (PyPI trusted publishing). |
+| `expect-provenance` | no | `false` | `true` to require a provenance record for every file (PyPI and TestPyPI trusted publishing). |
 | `attempts` | no | `20` | How many times to look before giving up; a fresh upload takes a while to appear. |
 | `delay` | no | `15` | Seconds between attempts. |
 | `import-name` | no | empty | What the package is imported as. Default is the distribution name with `_`. |

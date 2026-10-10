@@ -210,6 +210,17 @@ def test_the_template_is_the_pipeline_the_docs_describe():
     assert template["on"]["workflow_dispatch"]["inputs"]["target"]["default"] == "dry-run"
 
 
+def test_in_the_template_the_rehearsal_checks_provenance_as_the_real_upload_does():
+    template = load(ROOT / "templates" / "python-package" / "python-publish.yml")
+    for name in ("publish-testpypi", "publish-pypi"):
+        read_back = next(
+            step
+            for step in jobs(template)[name]["steps"]
+            if str(step.get("uses", "")).startswith(f"{OWN}python/verify-published@")
+        )
+        assert read_back["with"]["expect-provenance"] == "true", name
+
+
 def test_in_the_template_only_the_publish_jobs_may_mint_an_identity():
     template = load(ROOT / "templates" / "python-package" / "python-publish.yml")
     assert template["permissions"] == {"contents": "read"}

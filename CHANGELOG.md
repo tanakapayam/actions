@@ -6,6 +6,12 @@ A release is a Git tag `vMAJOR.MINOR.PATCH`. Consumers pin the commit, not the t
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-10
+
+### Changed
+
+- The Python publish template checks provenance on the TestPyPI rehearsal as well as on PyPI (`expect-provenance: "true"` on both read-backs), so a rehearsal is the real thing in everything but the version number. TestPyPI generates attestations for a trusted-publishing upload, but its provenance endpoint has not been checked from here: if that check is ever the only red step of a rehearsal, remove the line from that step.
+
 ## [0.1.2] - 2026-10-09
 
 ### Changed

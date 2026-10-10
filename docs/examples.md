@@ -1,6 +1,6 @@
 # Examples
 
-Recipes for the usual variations. Every snippet here is checked by the tests against the `action.yml` files, so an input that does not exist, or a required one that is missing, fails CI. Replace `@<commit> # v0.1.0` with the pinned commit of a release ([how](guide.md#2-add-the-workflow)).
+Recipes for the usual variations. Every snippet here is checked by the tests against the `action.yml` files, so an input that does not exist, or a required one that is missing, fails CI. Replace `@<commit> # v0.1.3` with the pinned commit of a release ([how](guide.md#2-add-the-workflow)).
 
 ## Only the guard, for any ecosystem
 
@@ -12,7 +12,7 @@ The guard reads nothing from your code: a step of yours reads the version, so it
   run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.0
+  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -34,7 +34,7 @@ jobs:
       - run: make dist
       - name: Fingerprint the build
         id: fingerprint
-        uses: tanakapayam/actions/artifact/fingerprint@<commit> # v0.1.0
+        uses: tanakapayam/actions/artifact/fingerprint@<commit> # v0.1.3
         with:
           path: dist
       - uses: actions/upload-artifact@<commit> # v7.0.1
@@ -50,7 +50,7 @@ jobs:
           name: dist
           path: dist/
       - name: Check these are exactly the files that were built
-        uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.1.0
+        uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.1.3
         with:
           path: dist
           expected: ${{ needs.build.outputs.fingerprint }}
@@ -61,7 +61,7 @@ Hidden files (names that begin with a dot) are not part of the fingerprint, beca
 output. If you do upload them (`include-hidden-files: true`), count them on both sides:
 
 ```yaml
-- uses: tanakapayam/actions/artifact/fingerprint@<commit> # v0.1.0
+- uses: tanakapayam/actions/artifact/fingerprint@<commit> # v0.1.3
   with:
     path: site
     include-hidden: "true"
@@ -73,7 +73,7 @@ The built-in check proves a package installs and imports. A script of yours prov
 
 ```yaml
 - name: Install the build and run my checks against it
-  uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+  uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
   with:
     dist: ${{ runner.temp }}/dist
     expect-py-typed: "true"
@@ -107,7 +107,7 @@ stage:
         name: dist
         path: ${{ runner.temp }}/dist
     - name: Install and smoke-test on this Python
-      uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+      uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
       with:
         dist: ${{ runner.temp }}/dist
         python: uv run --no-project python
@@ -118,7 +118,7 @@ stage:
 hatch-vcs and setuptools-scm write a `_version.py` that is in the build and not in the source tree. Say so, one glob per line:
 
 ```yaml
-- uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+- uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
   with:
     dist: ${{ runner.temp }}/dist
     allow-extra: |
@@ -130,7 +130,7 @@ hatch-vcs and setuptools-scm write a `_version.py` that is in the build and not 
 The package is looked for at `src/<import name>`, then `<import name>`. Otherwise say where:
 
 ```yaml
-- uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+- uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
   with:
     dist: ${{ runner.temp }}/dist
     package-dir: lib/my_package
@@ -144,13 +144,13 @@ The actions always run from the workspace root, even when your job sets `default
 ```yaml
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.0
+  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
   with:
     tag-prefix: mypkg-v
     version: ${{ steps.version.outputs.version }}
     changelog: packages/mypkg/CHANGELOG.md
 - name: Install the build and check it
-  uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.0
+  uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
   with:
     dist: ${{ runner.temp }}/dist
     source-root: packages/mypkg
@@ -163,7 +163,7 @@ For a version kept in `pyproject.toml`, say how to find it:
 ```yaml
 - name: Give a rehearsal a version of its own
   id: rehearsal
-  uses: tanakapayam/actions/python/rehearsal-version@<commit> # v0.1.0
+  uses: tanakapayam/actions/python/rehearsal-version@<commit> # v0.1.3
   with:
     file: pyproject.toml
     pattern: '^version = "([^"]+)"$'
@@ -175,11 +175,14 @@ TestPyPI does not have your dependencies, so they are installed from PyPI (the d
 
 ```yaml
 - name: Install the rehearsal back from TestPyPI and check it
-  uses: tanakapayam/actions/python/verify-published@<commit> # v0.1.0
+  uses: tanakapayam/actions/python/verify-published@<commit> # v0.1.3
   with:
     dist: dist
     index: https://test.pypi.org
+    expect-provenance: "true"
 ```
+
+A rehearsal that checks provenance too is the real thing in everything but the version number. TestPyPI generates attestations for a trusted-publishing upload as PyPI does, so this should pass; if the check is ever the only red step, see [what each message means](failures.md) before dropping the line.
 
 ## Checking a release that already exists
 

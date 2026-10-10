@@ -26,14 +26,14 @@ Search the workflow for `EDIT` and change each: the file that holds the version,
 Then pin the actions. Each `tanakapayam/actions/...@COMMIT_SHA # vX.Y.Z` line needs the commit of a release of this repository:
 
 ```
-git ls-remote --tags https://github.com/tanakapayam/actions v0.1.0 'v0.1.0^{}' | tail -n1 | cut -f1
+git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1
 ```
 
 (It prints the commit the tag points at, whether the tag is annotated or not. The release's workflow run also prints the line to paste.) To fill every placeholder in one go:
 
 ```
-SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.0 'v0.1.0^{}' | tail -n1 | cut -f1)
-test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.0/" .github/workflows/python-publish.yml
+SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1)
+test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" .github/workflows/python-publish.yml
 ```
 
 (On macOS, `sed -i ''`. The test of 40 characters is there so that an empty lookup cannot write an empty pin.)
@@ -53,7 +53,7 @@ If a stage job is red, the message says which file is missing from which archive
 
 ## 4. Rehearse on TestPyPI (optional)
 
-Run it again with target `testpypi`. After the stage, the build uploads to TestPyPI and then **reads it back**: it waits for the index, compares hashes, downloads the files, installs them into a fresh environment and smoke-tests that. You can try it yourself:
+Run it again with target `testpypi`. After the stage, the build uploads to TestPyPI and then **reads it back**: it waits for the index, compares hashes, downloads the files, installs them into a fresh environment, smoke-tests that, and checks that every file has provenance (the template turns `expect-provenance` on for the rehearsal as it does for the real upload, so the rehearsal is the real thing in everything but the version number). You can try it yourself:
 
 ```
 pip install -i https://test.pypi.org/simple/ "mypkg==1.2.3.dev4201"

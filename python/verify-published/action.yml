@@ -2,7 +2,7 @@ name: Python verify published
 description: >-
   After uploading to PyPI or TestPyPI, read the release back: wait for the index to list the
   files, compare its hashes with the files that were built, download them again, install the
-  package from what the index serves and smoke-test it, and (on PyPI) check provenance.
+  package from what the index serves and smoke-test it, and (on PyPI or TestPyPI) check provenance.
 
 inputs:
   dist:
@@ -12,7 +12,7 @@ inputs:
     description: The index's root, without a trailing slash. `https://test.pypi.org` for TestPyPI.
     default: https://pypi.org
   expect-provenance:
-    description: "`true` to require a provenance record for every file (PyPI trusted publishing)."
+    description: "`true` to require a provenance record for every file (PyPI and TestPyPI trusted publishing)."
     default: "false"
   attempts:
     description: How many times to look before giving up; a fresh upload takes a while to appear.
