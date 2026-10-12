@@ -25,7 +25,7 @@ It is **deliberately stricter than GitHub**. It understands only `inputs.*`, `gi
 
 ## What is not tested
 
-- **The real PyPI and npm.** Their behavior (and their lag) is modeled, not exercised. The first real read-back is the first real read-back; it was run by hand against a published release while building this.
+- **A real upload to PyPI through the workflow.** The read-back was run against a real PyPI release (conclude 1.1.0, provenance included) and against TestPyPI in a real consumer's rehearsals, which also exercised the retries on a real index. What has not run is a `publish-pypi` job end to end, with its approval gate; that happens at its first real release. **npm** is not exercised at all (see the [roadmap](roadmap.md)).
 - **GitHub-side semantics** beyond what `dogfood` runs: expression functions, `defaults.run`, a composite action's behavior on runners other than `ubuntu-24.04`, and trusted publishing itself.
 - **Platform wheels and extension modules.** Out of scope for 0.x.
 - **A malicious build job.** See [Concepts](concepts.md#what-this-does-not-do).

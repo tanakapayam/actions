@@ -76,7 +76,7 @@ The generic actions (`release/guard`, `artifact/fingerprint`, `artifact/verify-f
 
 ## How is it tested, and why should I trust it?
 
-Every script is unit-tested; the Python checks are integration-tested against a real build, real virtual environments and a local index that can misbehave on purpose; each `action.yml` is run through a test runner and again for real in CI. The first real read-back was run by hand against a published release. [Testing](testing.md) lists what is covered and, as plainly, what is not.
+Every script is unit-tested; the Python checks are integration-tested against a real build, real virtual environments and a local index that can misbehave on purpose; each `action.yml` is run through a test runner and again for real in CI, including a real upload and download of the artifact. They are used in the release pipelines of [conclude](https://github.com/tanakapayam/conclude), where a dry run and a TestPyPI rehearsal (hashes, install and provenance read back) have run on GitHub, and the read-back was also run against a real PyPI release. [Testing](testing.md) lists what is covered and, as plainly, what is not.
 
 ## Where do I ask for help or report a problem?
 

@@ -6,6 +6,11 @@ A release is a Git tag `vMAJOR.MINOR.PATCH`. Consumers pin the commit, not the t
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: conclude is described as the first real consumer, with a link to its workflow as a worked example, and what its first runs taught (the changes of 0.1.1 to 0.1.3). The migration guide is a record plus a generic order of work, and no longer a plan with placeholders. The testing page says plainly what has run for real and what has not (a real `publish-pypi` job end to end, and npm). The TestPyPI provenance check is described as confirmed on a real rehearsal.
+- `scripts/bump_docs.py` keeps the release that the examples pin in step with the latest dated release in this changelog, and a test fails if they disagree, so a release cannot go out with examples that name the one before. `RELEASING.md` has the step.
+
 ## [0.1.3] - 2026-10-10
 
 ### Changed

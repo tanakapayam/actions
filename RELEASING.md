@@ -14,12 +14,12 @@ Once, in the repository's settings:
 - **About: a description and topics,** such as `github-actions`, `pypi`, `release-automation`, `supply-chain-security`, `trusted-publishing`, so people can find it.
 - **The repository is public,** which a consumer's public repository needs to use its actions.
 
-Then release as below, and use the new release yourself: migrate [conclude](docs/migrating-conclude.md) and watch its `dry-run`. A first real consumer finds what tests cannot.
+Then release as below. After a release, use it yourself: bump a consumer such as [conclude](docs/migrating-conclude.md) and watch its `dry-run` and `testpypi` runs. A real consumer finds what tests cannot: its first runs found the hidden-file bug of v0.1.1 and the confusing retry of v0.1.2.
 
 ## Steps
 
 1. In `CHANGELOG.md`, change the heading to the version and the date: `## [0.2.0] - 2026-11-03` (it says `Unreleased` until now). Move anything that is still pending to a new `## [Unreleased]` section above it.
-2. Merge to `main` with CI green.
+2. Point the examples at the release: `uv run python scripts/bump_docs.py 0.2.0`. It rewrites the version in every example that shows how to use these actions (and in the command that looks a commit up), and a test fails until it has been run. Merge to `main` with CI green.
 3. Create a GitHub Release from a new tag `v0.2.0` on that commit. Write the notes from the changelog entry; call out anything that changes an input or an output.
 4. The `Release` workflow runs CI again on the tag, then checks that the tag is `v<major>.<minor>.<patch>`, that the changelog has a dated entry for it, and that the commit is on `main`. Its summary prints the exact line to pin.
 5. Update the consumers (conclude's workflows, any template copies) to the new commit. Dependabot will propose it, with the cooldown, in a week; do it by hand if you are in a hurry.

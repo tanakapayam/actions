@@ -38,7 +38,7 @@ Anyone who publishes a package from GitHub Actions and would like "it shipped" t
     version: ${{ steps.version.outputs.version }}
 ```
 
-**The whole pipeline for a Python package, in about twenty minutes.** Copy [`templates/python-package/python-publish.yml`](templates/python-package/python-publish.yml), fill in the `EDIT` lines, pin the actions, and run it as a `dry-run`: it builds, fingerprints and stages your package on every Python you list, and uploads nothing. The [guide](docs/guide.md) takes it from there to the first release.
+**The whole pipeline for a Python package, in about twenty minutes.** Copy [`templates/python-package/python-publish.yml`](templates/python-package/python-publish.yml), fill in the `EDIT` lines, pin the actions, and run it as a `dry-run`: it builds, fingerprints and stages your package on every Python you list, and uploads nothing. The [guide](docs/guide.md) takes it from there to the first release, and [conclude's workflow](https://github.com/tanakapayam/conclude/blob/main/.github/workflows/python-publish.yml) shows the result in a real repository.
 
 ## What is in it
 
@@ -96,7 +96,7 @@ Each release's workflow run prints the line to paste. Dependabot (`github-action
 
 ## Status
 
-Version 0.1.0 covers a pure-Python package published to PyPI. Until 1.0, a minor release may change an input or an output; the changelog says so when it does.
+The 0.x releases cover a pure-Python package published to PyPI and TestPyPI. They are used by [conclude](https://github.com/tanakapayam/conclude), whose [Python publish workflow](https://github.com/tanakapayam/conclude/blob/main/.github/workflows/python-publish.yml) is a complete worked example: its dry run and its TestPyPI rehearsal, provenance included, have run on GitHub with these actions, and the first real consumer's runs found, and fixed, two things that tests had not. What has not yet run is a real upload to PyPI through the workflow, which happens at that package's next release. Until 1.0, a minor release may change an input or an output; the changelog says so when it does.
 
 ## Getting help
 

@@ -2,7 +2,7 @@
 
 This takes a pure-Python package from "I build it by hand" to a pipeline that builds once, stages the exact files, waits for your approval, uploads with trusted publishing and reads the release back. It assumes a repository on GitHub and a package that builds with `uv build` (or any PEP 517 backend: hatchling, setuptools, flit).
 
-Read [Concepts](concepts.md) first if you want the reasoning; this is the procedure.
+Read [Concepts](concepts.md) first if you want the reasoning; this is the procedure. For the result in a real repository, see [conclude's Python publish workflow](https://github.com/tanakapayam/conclude/blob/main/.github/workflows/python-publish.yml), which uses every action here.
 
 ## 0. What your project needs
 

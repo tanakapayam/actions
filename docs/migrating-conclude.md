@@ -1,8 +1,8 @@
 # Migrating conclude
 
-[conclude](https://github.com/tanakapayam/conclude) is where these actions came from, so it is also the first consumer. Its three publish workflows each carry their own copy of the same ideas; this maps every copy to the action that replaces it, in the order that is safe to do it.
+[conclude](https://github.com/tanakapayam/conclude) is where these actions came from, so it is also the first consumer. Its three publish workflows each carried their own copy of the same ideas; this maps every copy to the action that replaced it, records what the first real runs taught, and gives the order that is safe for another repository.
 
-The conclude migration changes release plumbing, not the package, so it ships as plain commits with a dry run to prove each one. Pin commits only after this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1`).
+The migration changed release plumbing, not the package, so it shipped as plain commits with a dry run to prove each one. A repository pins commits only once this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1`).
 
 ## Python (`python-publish.yml`)
 
@@ -92,27 +92,25 @@ Only the generic pieces move now:
 - Bash's `.sha256` asset is a *published checksum of one file*, in `sha256sum` format. It must stay a raw `sha256sum`; the fingerprint here is an internal pipeline check and would not be the same string. Keep it.
 - Node compares npm's own `integrity` value and stages on GitHub Packages. That has no equivalent here yet: the Node actions are on the [roadmap](roadmap.md), so leave `registry.mjs` where it is.
 
-## Applying the prepared change
+## Result
 
-The Python, Node and Bash workflows, `python/scripts/smoke.py`, conclude's staged-pipeline tests and `python/RELEASING.md` come as one prepared change, with the actions pinned as `@COMMIT_SHA # vX.Y.Z` placeholders. Once `v0.1.3` of this repository is released:
+conclude's three publish workflows now use these actions ([the Python one](https://github.com/tanakapayam/conclude/blob/main/.github/workflows/python-publish.yml)), and `python/scripts/release.py` is gone. On GitHub, its dry run and its TestPyPI rehearsal have run with every action, including the read-back of hashes, install and provenance from TestPyPI, and the actions were also run against a real PyPI release by hand. Still to run is the real `publish-pypi` job, with its approval gate, which happens at that package's next real release; the Node and Bash guards run at theirs.
 
-```
-# from the root of the conclude repository
-unzip -o conclude-migration.zip
-git rm python/scripts/release.py python/test/test_release_script.py
-SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1)
-test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" .github/workflows/*.yml
-```
+## What the first real runs taught
 
-(on macOS, `sed -i ''`). Until the placeholders are replaced, conclude's own pin test fails, on purpose: nothing unpinned can be merged. Then run the Python workflow as `dry-run`, then `testpypi`.
+A consumer's first runs found what the tests had not, and each became a release of these actions with a test that would have caught it:
 
-## Order of work
+- **v0.1.1: a build's hidden files.** `uv build` leaves a `.gitignore` in its output directory and `actions/upload-artifact` leaves hidden files out, so a fingerprint that counted everything never survived the trip between jobs. Hidden files are no longer counted by default (`include-hidden` opts in), a mismatch lists the files, and CI now fingerprints across a real upload and download.
+- **v0.1.2: a retry that read like a failure.** A real TestPyPI index listed the release a moment before the page `pip` reads did, and the log said `ERROR: No matching distribution found`. A retry is now `not yet:`, says when it looks again, and says when it got there.
+- **v0.1.3: the rehearsal checks provenance too.** TestPyPI serves attestations, so the rehearsal does what the real upload does, and is the real thing in everything but the version number.
 
-1. Release `v0.1.3` of this repository (see [RELEASING.md](../RELEASING.md)); note the commit.
-2. In conclude, replace the Python guard and the fingerprint steps; run the workflow as `dry-run`.
+## Order of work for another repository
+
+1. Pin a release of this repository (`git ls-remote`, above).
+2. Replace the guard and the fingerprint steps; run the workflow as `dry-run`.
 3. Replace the stage with `python/verify-install`; `dry-run` again.
-4. Replace the two read-backs, run as `testpypi` (rehearsal), then release for real.
-5. Delete `python/scripts/release.py` and the tests that pinned it.
-6. Replace the guard in the Node and Bash workflows.
+4. Replace the two read-backs and run as `testpypi`, the rehearsal, then release for real.
+5. Delete whatever local scripts and tests the actions replaced.
+6. Replace the guard in any other publish workflows.
 
 Each step is a separate commit with a green dry run, so any one can be reverted alone.

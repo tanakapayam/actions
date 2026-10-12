@@ -182,7 +182,7 @@ TestPyPI does not have your dependencies, so they are installed from PyPI (the d
     expect-provenance: "true"
 ```
 
-A rehearsal that checks provenance too is the real thing in everything but the version number. TestPyPI generates attestations for a trusted-publishing upload as PyPI does, so this should pass; if the check is ever the only red step, see [what each message means](failures.md) before dropping the line.
+A rehearsal that checks provenance too is the real thing in everything but the version number. TestPyPI generates attestations for a trusted-publishing upload as PyPI does, and serves them for the read-back; this is confirmed on a real rehearsal. If the check is ever the only red step, see [what each message means](failures.md).
 
 ## Checking a release that already exists
 

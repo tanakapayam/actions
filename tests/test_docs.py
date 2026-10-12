@@ -171,3 +171,93 @@ def test_the_pre_release_checklist_names_what_the_other_files_rely_on():
     assert "private vulnerability reporting" in releasing
     for text in ("SECURITY.md", "code of conduct"):
         assert text in releasing
+
+
+# --- the examples always name the latest release -------------------------------------------------
+
+
+def load_bump_docs():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("bump_docs", ROOT / "scripts" / "bump_docs.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_examples_name_the_latest_dated_release():
+    bump = load_bump_docs()
+    problems = bump.stale(bump.latest_release())
+    assert not problems, "run scripts/bump_docs.py <version>:\n" + "\n".join(problems)
+
+
+def test_only_lines_that_show_how_to_use_the_actions_are_rewritten():
+    bump = load_bump_docs()
+    text = "\n".join(
+        [
+            "  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3",
+            "git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}'",
+            'sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" w.yml',
+            "  uses: actions/checkout@<commit> # v7.0.1",
+            "  uses: tanakapayam/actions/release/guard@COMMIT_SHA # vX.Y.Z",
+            "Releases such as v0.1.3 are listed in the changelog.",
+        ]
+    )
+    assert bump.rewrite(text, "0.2.0").split("\n") == [
+        "  uses: tanakapayam/actions/release/guard@<commit> # v0.2.0",
+        "git ls-remote --tags https://github.com/tanakapayam/actions v0.2.0 'v0.2.0^{}'",
+        'sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.2.0/" w.yml',
+        "  uses: actions/checkout@<commit> # v7.0.1",  # another project's pin is not ours to touch
+        "  uses: tanakapayam/actions/release/guard@COMMIT_SHA # vX.Y.Z",  # a placeholder stays one
+        "Releases such as v0.1.3 are listed in the changelog.",  # prose is not a usage line
+    ]
+
+
+def test_the_latest_release_is_the_newest_dated_entry_not_an_unreleased_one(tmp_path, monkeypatch):
+    bump = load_bump_docs()
+    (tmp_path / "CHANGELOG.md").write_text(
+        "## [Unreleased]\n\n## [0.3.0] - Unreleased\n\n"
+        "## [0.2.0] - 2026-11-03\n\n## [0.1.0] - 2026-10-01\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bump, "ROOT", tmp_path)
+    assert bump.latest_release() == "0.2.0"
+
+
+def test_the_script_rewrites_the_real_kinds_of_file_and_leaves_history_alone(tmp_path, monkeypatch):
+    import shutil
+
+    bump = load_bump_docs()
+    for name in (
+        "README.md",
+        "CONTRIBUTING.md",
+        "RELEASING.md",
+        "CHANGELOG.md",
+        "docs",
+        "templates",
+    ):
+        source = ROOT / name
+        if source.is_dir():
+            shutil.copytree(source, tmp_path / name)
+        else:
+            shutil.copy(source, tmp_path / name)
+    monkeypatch.setattr(bump, "ROOT", tmp_path)
+    before = {
+        n: (tmp_path / n).read_text(encoding="utf-8") for n in ("RELEASING.md", "CHANGELOG.md")
+    }
+    assert bump.main(["9.9.9"]) == 0
+    assert bump.stale("9.9.9") == []
+    assert bump.stale("0.0.1") != []
+    for name, text in before.items():  # the changelog and the releasing notes are history
+        assert (tmp_path / name).read_text(encoding="utf-8") == text
+    assert "# v9.9.9" in (tmp_path / "docs" / "examples.md").read_text(encoding="utf-8")
+
+
+def test_the_script_refuses_a_bad_version_and_both_modes_at_once(capsys):
+    bump = load_bump_docs()
+    with pytest.raises(SystemExit):
+        bump.main(["not-a-version"])
+    with pytest.raises(SystemExit):
+        bump.main([])
+    with pytest.raises(SystemExit):
+        bump.main(["0.2.0", "--check"])
