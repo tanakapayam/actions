@@ -26,14 +26,14 @@ Search the workflow for `EDIT` and change each: the file that holds the version,
 Then pin the actions. Each `tanakapayam/actions/...@COMMIT_SHA # vX.Y.Z` line needs the commit of a release of this repository:
 
 ```
-git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1
+git ls-remote --tags https://github.com/tanakapayam/actions v0.2.0 'v0.2.0^{}' | tail -n1 | cut -f1
 ```
 
 (It prints the commit the tag points at, whether the tag is annotated or not. The release's workflow run also prints the line to paste.) To fill every placeholder in one go:
 
 ```
-SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1)
-test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" .github/workflows/python-publish.yml
+SHA=$(git ls-remote --tags https://github.com/tanakapayam/actions v0.2.0 'v0.2.0^{}' | tail -n1 | cut -f1)
+test ${#SHA} -eq 40 && sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.2.0/" .github/workflows/python-publish.yml
 ```
 
 (On macOS, `sed -i ''`. The test of 40 characters is there so that an empty lookup cannot write an empty pin.)

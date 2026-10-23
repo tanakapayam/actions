@@ -1,0 +1,230 @@
+name: Node Publish
+
+# Publishes @tanakapayam/conclude to npm in two stages, with a person in between:
+#
+#   build       Guard the release, build, pack ONE tarball, and upload it as an artifact.
+#   stage       STAGING. Publish that tarball to GitHub Packages (npm.pkg.github.com), then install
+#               it back from there into a fresh project and check it. Nothing else can proceed
+#               until this passes. (Version numbers on npmjs.com are forever, so this is where a
+#               bad package is caught -- 0.1.0 shipped without its build output.)
+#   production  PRODUCTION. Waits for a reviewer to approve the `npm` environment, checks that
+#               the tarball is byte-for-byte the one that was staged, publishes that same tarball
+#               to npmjs.com with provenance (trusted publishing, no stored token), and installs
+#               it back from npm to confirm what users will get.
+#
+# Production only ever happens from a published GitHub Release with a `node-v<version>` tag.
+# A manual run (Actions -> Node Publish -> Run workflow) is a rehearsal: `dry-run` builds and
+# packs; `staging` also stages, under a throwaway `<version>-staging.<run>.<attempt>` version so
+# it never uses up a real one. `npm run rehearse` (see node/RELEASING.md) exercises the same
+# staging steps against a local registry, and node-ci.yml does so on every change.
+#
+# One-time setup is in node/RELEASING.md: the `npm` environment (with required reviewers) and the
+# `npm-staging` environment, plus the trusted publisher on npmjs.com (this workflow file, the
+# `npm` environment).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: A rehearsal (production only ever happens from a release)
+        type: choice
+        options: [dry-run, staging]
+        default: dry-run
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-publish-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: node
+
+jobs:
+  ci:
+    name: CI
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'node-v')
+    uses: ./.github/workflows/node-ci.yml
+
+  build:
+    name: Build and pack the tarball
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      name: ${{ steps.pack.outputs.name }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Read the version
+        id: package
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Check the package is public
+        if: github.event_name == 'release'
+        run: |
+          if [ "$(node -p "require('./package.json').private === true")" = "true" ]; then
+            echo "::error::package.json still says \"private\": true."
+            exit 1
+          fi
+      - name: Check the release is ready
+        if: github.event_name == 'release'
+        uses: tanakapayam/actions/release/guard@d85ef0d8e58c34845b6d7efe29ff16f154d00a32 # v0.1.3
+        with:
+          tag-prefix: node-v
+          version: ${{ steps.package.outputs.version }}
+          changelog: node/CHANGELOG.md
+      - name: Give a rehearsal a version of its own
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+        run: npm version "$VERSION-staging.${{ github.run_number }}.${{ github.run_attempt }}" --no-git-tag-version
+      - name: Install
+        run: npm ci
+      - name: Build, pack and smoke-test the tarball
+        run: npm run smoke
+      - name: Pack the tarball that will be staged and published
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          npm pack --pack-destination "$RUNNER_TEMP/pack" --json > "$RUNNER_TEMP/pack.json"
+          tarball="$(node -p "require(process.env.RUNNER_TEMP + '/pack.json')[0].filename")"
+          {
+            echo "name=$(node -p "require('./package.json').name")"
+            echo "version=$(node -p "require('./package.json').version")"
+            echo "tarball=$tarball"
+            echo "integrity=$(node scripts/registry.mjs integrity "$RUNNER_TEMP/pack/$tarball")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Upload the tarball
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package
+          path: ${{ runner.temp }}/pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  stage:
+    name: Stage on GitHub Packages
+    needs: build
+    if: github.event_name == 'release' || inputs.mode == 'staging'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: npm-staging
+      url: https://github.com/${{ github.repository }}/pkgs/npm/conclude
+    permissions:
+      contents: read
+      packages: write # publish to GitHub Packages with the workflow's own token
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REGISTRY: https://npm.pkg.github.com
+      NAME: ${{ needs.build.outputs.name }}
+      VERSION: ${{ needs.build.outputs.version }}
+      TARBALL: ${{ needs.build.outputs.tarball }}
+      BUILT: ${{ needs.build.outputs.integrity }}
+    outputs:
+      integrity: ${{ steps.publish.outputs.integrity }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24 for GitHub Packages
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@tanakapayam"
+      - name: Download the tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package
+          path: ${{ runner.temp }}/pack
+      - name: Publish it to staging (a re-run of identical content is a no-op)
+        id: publish
+        run: |
+          test "$(node scripts/registry.mjs integrity "$RUNNER_TEMP/pack/$TARBALL")" = "$BUILT"
+          node scripts/registry.mjs publish-if-absent "$RUNNER_TEMP/pack/$TARBALL" --registry "$REGISTRY"
+      - name: Install it back from staging and check it
+        run: node scripts/registry.mjs verify --package "$NAME" --version "$VERSION" --registry "$REGISTRY" --integrity "$BUILT"
+      - name: Summary
+        run: |
+          {
+            echo "### Staged \`$NAME@$VERSION\`"
+            echo ""
+            echo "Installed back from $REGISTRY and checked (import, require, integrity \`$BUILT\`)."
+            echo ""
+            echo "To try it: \`echo '@tanakapayam:registry=$REGISTRY' >> .npmrc\` and authenticate with a token that has \`read:packages\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  production:
+    name: Publish to npm
+    needs: [build, stage]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The approval gate: the job waits here until a required reviewer approves the `npm` environment.
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@tanakapayam/conclude/v/${{ needs.build.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance (OIDC); no npm token is stored
+    env:
+      NAME: ${{ needs.build.outputs.name }}
+      VERSION: ${{ needs.build.outputs.version }}
+      TARBALL: ${{ needs.build.outputs.tarball }}
+      BUILT: ${{ needs.build.outputs.integrity }}
+      STAGED: ${{ needs.stage.outputs.integrity }}
+      ATTEMPTS: 20
+      DELAY: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - name: Download the tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package
+          path: ${{ runner.temp }}/pack
+      - name: Check npm can do trusted publishing (11.5.1 or newer)
+        run: |
+          node -e "const [a, b, c] = process.argv[1].split('.').map(Number); if (!(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))))) { console.error('::error::npm ' + process.argv[1] + ' is older than 11.5.1'); process.exit(1); }" "$(npm --version)"
+      - name: Check this is exactly the tarball that was staged
+        run: |
+          local="$(node scripts/registry.mjs integrity "$RUNNER_TEMP/pack/$TARBALL")"
+          if [ "$local" != "$BUILT" ] || [ "$local" != "$STAGED" ]; then
+            echo "::error::The tarball is not the one that was staged (built $BUILT, staged $STAGED, here $local)."
+            exit 1
+          fi
+      - name: Publish the staged tarball to npm
+        run: npm publish "$RUNNER_TEMP/pack/$TARBALL" --provenance --access public
+      - name: Install it back from npm and check it, provenance included
+        run: node scripts/registry.mjs verify --package "$NAME" --version "$VERSION" --registry https://registry.npmjs.org --integrity "$BUILT" --expect-provenance --attempts "$ATTEMPTS" --delay "$DELAY"
+      - name: Summary
+        run: |
+          {
+            echo "### Published \`$NAME@$VERSION\` to npm"
+            echo ""
+            echo "The tarball that was staged and checked, integrity \`$BUILT\`, with provenance."
+            echo ""
+            echo "If it turns out to be wrong: publish a fixed version and \`npm deprecate $NAME@$VERSION\`."
+          } >> "$GITHUB_STEP_SUMMARY"

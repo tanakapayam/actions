@@ -1,0 +1,126 @@
+name: Bash CI
+
+on:
+  push:
+    branches:
+      - main
+      - bash
+      - ci-*
+  pull_request:
+  workflow_call: # bash-publish.yml runs this before it publishes anything
+
+permissions:
+  contents: read
+
+# Every third-party action is pinned to a full commit SHA (the version is
+# in the trailing comment); .github/dependabot.yml keeps them current.
+# Nothing else is used: bats, jq and shellcheck come from apt or the runner
+# image, and Bash 5.3 is built from source (the runner images ship 5.2).
+
+defaults:
+  run:
+    working-directory: bash
+
+env:
+  # Optional: set a repository variable BASH_TARBALL_SHA256 (Settings, Secrets
+  # and variables, Actions, Variables) to the sha256 of bash-5.3.tar.gz -- the
+  # build step prints it -- and the build refuses any other tarball. Unset
+  # means "trust the GNU mirror".
+  BASH_TARBALL_SHA256: ${{ vars.BASH_TARBALL_SHA256 }}
+
+jobs:
+  lint:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The library and the scripts
+        run: shellcheck src/conclude.sh scripts/*.sh
+      - name: The tests
+        # bash/test/.shellcheckrc explains the three checks it turns off.
+        run: shellcheck --shell=bats test/*.bats
+
+  test:
+    name: test (${{ matrix.os }}, Bash ${{ matrix.bash }})
+    runs-on: ${{ matrix.os }}
+    # Experimental legs report without gating a merge or a release.
+    continue-on-error: ${{ matrix.experimental == true }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+        bash: ["5.3"]
+        include:
+          # Early warning for the `ubuntu-latest` move to 26.04 (rolling out
+          # October 19 - November 19, 2026).
+          - os: ubuntu-26.04
+            bash: "5.3"
+            experimental: true
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install bats and jq (test-only tools; conclude.sh needs neither)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats jq
+      - name: Build Bash ${{ matrix.bash }}
+        run: scripts/install-bash.sh "${{ matrix.bash }}"
+      - name: Check which Bash the rest of the job uses
+        run: |
+          bash --version | head -n 1
+          [[ $BASH_VERSION == ${{ matrix.bash }}* ]]
+      - name: Build a Bash known to be older than 5.3 (for the version-gate test below)
+        # /usr/bin/bash can't be assumed old enough to test this against: a
+        # runner image can (and, once, did) already ship Bash 5.3+ as its
+        # system bash, which made this pass for the wrong reason -- "already
+        # new enough" looks identical to "the gate let it through". Building
+        # a specific old version keeps this test meaningful regardless of
+        # what the image ships. GITHUB_PATH is cleared for this one call so
+        # this older Bash never lands ahead of the real 5.3 on PATH for the
+        # steps that follow.
+        run: GITHUB_PATH='' scripts/install-bash.sh 5.2 "$HOME/bash-old"
+      - name: Refuses to load on a Bash older than 5.3
+        run: |
+          # shellcheck disable=SC2016 # $BASH_VERSION is meant to expand in the *old* bash, not here
+          old_version=$("$HOME/bash-old/bin/bash" -c 'echo "$BASH_VERSION"')
+          if "$HOME/bash-old/bin/bash" --norc -c 'source src/conclude.sh' 2>/dev/null; then
+            echo "::error::conclude.sh loaded on Bash $old_version, which is older than 5.3"
+            exit 1
+          fi
+      - name: Packaging safeguards on the one file
+        run: scripts/smoke.sh
+      - name: Conformance fixtures and integration tests
+        run: bats test/
+
+  package:
+    name: version, changelog and docs agree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: CONCLUDE_VERSION has a CHANGELOG entry
+        run: |
+          version=$(sed -n 's/^CONCLUDE_VERSION="\(.*\)"$/\1/p' src/conclude.sh)
+          [[ -n $version ]] || { echo "::error::no CONCLUDE_VERSION in src/conclude.sh"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md ||
+            { echo "::error::bash/CHANGELOG.md has no entry for $version"; exit 1; }
+      - name: Every public function is in the reference
+        run: |
+          missing=0
+          for fn in $(grep -oE '^conclude_[a-z_]+\(\)' src/conclude.sh | tr -d '()'); do
+            if ! grep -q "\`$fn" ../docs/bash/reference.md; then
+              echo "::error::$fn is not documented in docs/bash/reference.md"
+              missing=1
+            fi
+          done
+          exit "$missing"

@@ -1,0 +1,156 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - main
+      - python
+      - ci-*
+  pull_request:
+  workflow_call: # python-publish.yml runs this before it publishes anything
+
+permissions:
+  contents: read
+
+# Every third-party action is pinned to a full commit SHA (the version is
+# in the trailing comment); .github/dependabot.yml keeps them current.
+
+defaults:
+  run:
+    working-directory: python
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # The experimental leg reports without gating a merge or a release.
+    continue-on-error: ${{ matrix.experimental == true }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          # Early warning for the `ubuntu-latest` move to 26.04 (rolling out
+          # October 19 - November 19, 2026). Runners are pinned below, so
+          # nothing changes under us until we choose to move.
+          - os: ubuntu-26.04
+            python-version: "3.14"
+            experimental: true
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the project and its dev tools (pathspec included)
+        run: uv sync --locked
+      - name: pytest
+        run: uv run pytest -q
+
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python 3.11 (the oldest supported version)
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.11"
+      - name: Install the project and its dev tools
+        run: uv sync --locked
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format --check
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy
+
+  no-extras:
+    name: pytest with no optional dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python 3.13
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.13"
+      - name: Install the package on its own, plus pytest (no pathspec)
+        run: |
+          uv venv "$RUNNER_TEMP/venv-plain"
+          uv pip install --python "$RUNNER_TEMP/venv-plain/bin/python" . pytest
+      - name: pytest (the pathspec-dependent tests skip themselves)
+        run: |
+          "$RUNNER_TEMP/venv-plain/bin/python" -m pytest -q
+
+  build:
+    name: build and twine check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv and Python 3.13
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.13"
+      - name: Build the sdist and wheel
+        run: uv build
+      - name: twine check
+        run: uvx twine check --strict dist/*
+      - name: Check what the sdist contains
+        run: |
+          # Entries look like conclude-1.0.1/<path>: drop that prefix, then flag repository
+          # plumbing. .github/ and node/ can never appear -- pyproject.toml's own project
+          # root is this directory -- so this only needs to guard against uv.lock and
+          # leftover build/tool caches.
+          if tar -tzf dist/*.tar.gz | sed -E 's#^[^/]+/##' | grep -E '^uv\.lock$|(^|/)(\.venv[^/]*|__pycache__)/'; then
+            echo "::error::The sdist contains files that should not ship."
+            exit 1
+          fi
+      - name: Smoke-test the wheel in a clean environment
+        run: |
+          uv venv "$RUNNER_TEMP/venv-wheel"
+          uv pip install --python "$RUNNER_TEMP/venv-wheel/bin/python" dist/*.whl
+          "$RUNNER_TEMP/venv-wheel/bin/python" - <<'PY'
+          import pathlib
+
+          import conclude
+
+          print("conclude", conclude.__version__)
+          assert (pathlib.Path(conclude.__file__).parent / "py.typed").exists()
+          PY
+      - name: Fingerprint these distributions
+        # The same fingerprint, contents and install checks the publish workflow's stage job
+        # runs, so they are exercised on every change and not only on release day.
+        id: rehearsal
+        uses: tanakapayam/actions/artifact/fingerprint@d85ef0d8e58c34845b6d7efe29ff16f154d00a32 # v0.1.3
+        with:
+          path: python/dist
+      - name: Check they are still those distributions
+        uses: tanakapayam/actions/artifact/verify-fingerprint@d85ef0d8e58c34845b6d7efe29ff16f154d00a32 # v0.1.3
+        with:
+          path: python/dist
+          expected: ${{ steps.rehearsal.outputs.digest }}
+      - name: Install them into clean environments and smoke-test
+        uses: tanakapayam/actions/python/verify-install@d85ef0d8e58c34845b6d7efe29ff16f154d00a32 # v0.1.3
+        with:
+          dist: python/dist
+          source-root: python
+          expect-py-typed: "true"
+          smoke: python/scripts/smoke.py
+          python: uv run --no-project python

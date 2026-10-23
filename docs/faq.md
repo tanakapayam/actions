@@ -1,8 +1,8 @@
 # FAQ
 
-## Do I need all six actions?
+## Do I need all nine actions?
 
-No. They are independent. The guard alone is a fine first step for any release workflow, and the fingerprint pair helps any build-then-publish flow in any language. The Python pair (`verify-install`, `verify-published`) and `rehearsal-version` are for Python packages.
+No. They are independent. The guard alone is a fine first step for any release workflow, and the fingerprint pair helps any build-then-publish flow in any language. The Python pair (`verify-install`, `verify-published`) and `rehearsal-version` are for Python packages. `ci/all-green`, `python/supported-versions` and `workflow/policy` are about the CI around a release, and stand alone as well.
 [Examples](examples.md) shows each on its own.
 
 ## Does it publish my package?
@@ -50,9 +50,13 @@ The stage runs once per Python version you list, each a few minutes at most (it 
 
 The actions need no secrets and no token, and nothing in them writes anywhere but the job's own files, summary and output. Each is a screenful of `bash` around a script of standard-library Python; none uses another action; and an input only ever reaches a script as an environment variable, so a value that contains `$(...)` is just text. Pin the commit, as for any action. The one thing to watch is your own workflow: keep `id-token: write` on the publish jobs and nowhere else. See [SECURITY.md](../SECURITY.md) for what the actions do and do not defend against.
 
+## Why does the policy checker carry its own YAML reader?
+
+Because the actions use nothing but the standard library, and Python's has no YAML. Rather than install PyYAML on every run (a dependency that would sit in the supply chain of the check that polices the supply chain), `lib/workflow_policy.py` reads the plain block style that workflows are written in, with line numbers for the annotations. What it would have to guess at, it refuses: anchors, aliases, tags, merge keys, duplicate keys, multi-line quoted or flow scalars, tabs, a second document, and numbers and dates it does not model. A file it refuses is a finding, never a skip, so a workflow cannot escape the policy by being written in an unusual way. A test compares it with PyYAML on every real workflow, template, action manifest and issue form of both repositories, and the results must be identical ([testing](testing.md)).
+
 ## Why pin a commit and not a tag, or `@main`?
 
-A tag can be moved and a branch always moves; a commit cannot. For something that sits in your release pipeline, "exactly this code" is the right guarantee. Keep the version as a comment (`# v0.1.3`) and let Dependabot propose updates, which it will, as a pull request with the changelog.
+A tag can be moved and a branch always moves; a commit cannot. For something that sits in your release pipeline, "exactly this code" is the right guarantee. Keep the version as a comment (`# v0.2.0`) and let Dependabot propose updates, which it will, as a pull request with the changelog.
 
 ## Why isn't a hidden file such as `.gitignore` counted in the fingerprint?
 

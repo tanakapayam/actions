@@ -6,7 +6,7 @@
 
 Only lines that show how to *use* these actions are touched: a line that mentions
 ``tanakapayam/actions/``, ``git ls-remote`` or ``COMMIT_SHA`` has every ``vX.Y.Z`` on it rewritten,
-so a pin comment (``# v0.1.3``) and the tag in the command that looks a commit up always agree.
+so a pin comment (``# v0.2.0``) and the tag in the command that looks a commit up always agree.
 Placeholders such as ``# vX.Y.Z`` are not versions and stay as they are. RELEASING.md and the
 CHANGELOG are history and are never rewritten. tests/test_docs.py runs the check, so a release
 cannot go out with examples that pin the one before.

@@ -76,29 +76,64 @@ def test_there_are_examples_to_check():
 # --- the catalogue of messages -------------------------------------------------------------------
 
 
+def longest_literal(node: ast.expr) -> str:
+    pieces = [
+        n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    ]
+    return max(pieces, key=len).strip()
+
+
+# The exception that carries a message, and where the message is among its arguments.
+RAISED = {
+    "GuardError": 0,
+    "FingerprintError": 0,
+    "ReleaseError": 0,
+    "GateError": 0,
+    "VersionsError": 0,
+    "PolicyError": 0,
+    "YamlError": 0,
+}
+SCRIPTS = (
+    "guard",
+    "fingerprint",
+    "pyrelease",
+    "all_green",
+    "supported_versions",
+    "workflow_policy",
+)
+
+
 def error_fragments() -> list[tuple[str, str]]:
-    """The most distinctive literal piece of every error message the scripts can raise."""
+    """The most distinctive literal piece of every error message the scripts can raise.
+
+    That is each raised exception, and each ``Finding(file, line, rule, message)`` a policy rule
+    reports, whose message is the fourth argument.
+    """
     found = []
-    for name in ("guard", "fingerprint", "pyrelease"):
+    for name in SCRIPTS:
         tree = ast.parse((ROOT / "lib" / f"{name}.py").read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
-                continue
-            kind = getattr(node.exc.func, "id", getattr(node.exc.func, "attr", ""))
-            if kind in {"GuardError", "FingerprintError", "ReleaseError"} and node.exc.args:
-                pieces = [
-                    n.value
-                    for n in ast.walk(node.exc.args[0])
-                    if isinstance(n, ast.Constant) and isinstance(n.value, str)
-                ]
-                found.append((f"{name}.py:{node.lineno}", max(pieces, key=len).strip()))
+            if (
+                isinstance(node, ast.Raise)
+                and isinstance(node.exc, ast.Call)
+                and node.exc.args
+                and getattr(node.exc.func, "id", getattr(node.exc.func, "attr", "")) in RAISED
+            ):
+                found.append((f"{name}.py:{node.lineno}", longest_literal(node.exc.args[0])))
+            elif (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == "Finding"
+                and len(node.args) == 4
+                and not isinstance(node.args[3], ast.Name)
+            ):
+                found.append((f"{name}.py:{node.lineno}", longest_literal(node.args[3])))
     return found
 
 
 def test_the_catalogue_covers_every_message_in_the_scripts():
     catalogue = (ROOT / "docs" / "failures.md").read_text(encoding="utf-8")
     fragments = error_fragments()
-    assert len(fragments) >= 25
+    assert len(fragments) >= 70
     missing = [(where, text) for where, text in fragments if text not in catalogue]
     assert not missing, f"docs/failures.md does not list: {missing}"
 
@@ -195,12 +230,12 @@ def test_only_lines_that_show_how_to_use_the_actions_are_rewritten():
     bump = load_bump_docs()
     text = "\n".join(
         [
-            "  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3",
-            "git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}'",
-            'sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.1.3/" w.yml',
+            "  uses: tanakapayam/actions/release/guard@<commit> # v0.2.0",
+            "git ls-remote --tags https://github.com/tanakapayam/actions v0.2.0 'v0.2.0^{}'",
+            'sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.2.0/" w.yml',
             "  uses: actions/checkout@<commit> # v7.0.1",
             "  uses: tanakapayam/actions/release/guard@COMMIT_SHA # vX.Y.Z",
-            "Releases such as v0.1.3 are listed in the changelog.",
+            "Releases such as v0.2.0 are listed in the changelog.",
         ]
     )
     assert bump.rewrite(text, "0.2.0").split("\n") == [
@@ -209,7 +244,7 @@ def test_only_lines_that_show_how_to_use_the_actions_are_rewritten():
         'sed -i "s/@COMMIT_SHA # vX.Y.Z/@$SHA # v0.2.0/" w.yml',
         "  uses: actions/checkout@<commit> # v7.0.1",  # another project's pin is not ours to touch
         "  uses: tanakapayam/actions/release/guard@COMMIT_SHA # vX.Y.Z",  # a placeholder stays one
-        "Releases such as v0.1.3 are listed in the changelog.",  # prose is not a usage line
+        "Releases such as v0.2.0 are listed in the changelog.",  # prose is not a usage line
     ]
 
 

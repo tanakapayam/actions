@@ -348,3 +348,167 @@ def test_include_hidden_counts_them_on_both_sides_and_must_match(workspace, file
     assert "hidden file(s) not counted" in one_side.stderr
     assert "include-hidden-files: true" in one_side.stderr
     assert "### ❌ Fingerprint check failed" in one_side.summary
+
+
+# --- ci/all-green --------------------------------------------------------------------------------
+
+
+def all_green(workspace: Path, **inputs: str) -> actionrun.ActionResult:
+    return actionrun.run_action(ROOT / "ci" / "all-green", inputs, cwd=workspace)
+
+
+def needs_of(**results: str) -> str:
+    import json
+
+    return json.dumps({name: {"result": result, "outputs": {}} for name, result in results.items()})
+
+
+def test_all_green_passes_when_every_job_succeeded(workspace):
+    result = all_green(workspace, needs=needs_of(test="success", lint="success"))
+    assert result.ok, result.stderr
+    assert "all 2 job(s) succeeded" in result.stdout
+    assert "### ✅" in result.summary
+
+
+def test_all_green_fails_on_a_failed_and_on_a_skipped_job(workspace):
+    failed = all_green(workspace, needs=needs_of(test="success", lint="failure"))
+    assert not failed.ok and "::error::not every job succeeded: lint failure" in failed.stderr
+    assert "### ❌" in failed.summary
+    skipped = all_green(workspace, needs=needs_of(test="success", docs="skipped"))
+    assert not skipped.ok and "docs skipped" in skipped.stderr
+
+
+def test_all_green_allows_a_skip_only_for_a_job_that_is_named_one_per_line_or_comma(workspace):
+    needs = needs_of(test="success", docs="skipped", extra="skipped")
+    assert all_green(workspace, needs=needs, **{"allow-skipped": "docs\nextra"}).ok
+    assert all_green(workspace, needs=needs, **{"allow-skipped": "docs, extra"}).ok
+    assert not all_green(workspace, needs=needs, **{"allow-skipped": "docs"}).ok
+
+
+def test_all_green_refuses_a_typo_in_allow_skipped_an_empty_needs_and_a_wrong_shape(workspace):
+    typo = all_green(workspace, needs=needs_of(test="success"), **{"allow-skipped": "tset"})
+    assert not typo.ok and "which is not one of the jobs waited for" in typo.stderr
+    assert "needs is empty" in all_green(workspace, needs="{}").stderr
+    assert "needs is not JSON" in all_green(workspace, needs="test").stderr
+    assert "needs must be the JSON" in all_green(workspace, needs='["test"]').stderr
+    assert not all_green(workspace, needs="").ok
+
+
+# --- python/supported-versions -------------------------------------------------------------------
+
+
+def versions(workspace: Path, **inputs: str) -> actionrun.ActionResult:
+    return actionrun.run_action(ROOT / "python" / "supported-versions", inputs, cwd=workspace)
+
+
+def test_supported_versions_outputs_the_matrix_oldest_and_latest(workspace):
+    result = versions(workspace, pyproject=str(FIXTURES / "sample-pkg" / "pyproject.toml"))
+    assert result.ok, result.stderr
+    assert result.outputs == {
+        "matrix": '["3.11","3.12","3.13"]',
+        "oldest": "3.11",
+        "latest": "3.13",
+    }
+
+
+def test_supported_versions_reads_pyproject_toml_of_the_workspace_by_default(workspace):
+    (workspace / "pyproject.toml").write_text(
+        '[project]\nrequires-python = ">=3.12"\n'
+        'classifiers = ["Programming Language :: Python :: 3.12",'
+        ' "Programming Language :: Python :: 3.13"]\n',
+        encoding="utf-8",
+    )
+    result = versions(workspace)
+    assert result.ok and result.outputs["matrix"] == '["3.12","3.13"]'
+
+
+def test_supported_versions_checks_requires_python_unless_told_not_to(workspace):
+    (workspace / "pyproject.toml").write_text(
+        '[project]\nrequires-python = ">=3.12"\n'
+        'classifiers = ["Programming Language :: Python :: 3.11"]\n',
+        encoding="utf-8",
+    )
+    refused = versions(workspace)
+    assert not refused.ok and "is outside requires-python" in refused.stderr
+    allowed = versions(workspace, **{"check-requires-python": "false"})
+    assert allowed.ok and allowed.outputs["matrix"] == '["3.11"]'
+
+
+def test_supported_versions_fails_on_a_missing_file_and_on_no_classifiers(workspace):
+    assert "does not exist" in versions(workspace).stderr
+    (workspace / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    assert "lists no" in versions(workspace).stderr
+
+
+# --- workflow/policy -----------------------------------------------------------------------------
+
+GOOD_WORKFLOW = """\
+name: Good
+on: push
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+"""
+
+
+def policy(workspace: Path, **inputs: str) -> actionrun.ActionResult:
+    return actionrun.run_action(ROOT / "workflow" / "policy", inputs, cwd=workspace)
+
+
+@pytest.fixture
+def workflows(workspace: Path) -> Path:
+    folder = workspace / ".github" / "workflows"
+    folder.mkdir(parents=True)
+    (folder / "good.yml").write_text(GOOD_WORKFLOW, encoding="utf-8")
+    return folder
+
+
+def test_policy_passes_good_workflows_in_the_default_place(workspace, workflows):
+    result = policy(workspace)
+    assert result.ok, result.stderr
+    assert "1 workflow file(s) pass" in result.stdout
+
+
+def test_policy_annotates_each_finding_with_its_file_line_and_rule(workspace, workflows):
+    (workflows / "bad.yml").write_text(
+        GOOD_WORKFLOW.replace("ubuntu-24.04", "ubuntu-latest"), encoding="utf-8"
+    )
+    result = policy(workspace)
+    assert not result.ok
+    assert "::error file=.github/workflows/bad.yml,line=7,title=pinned-runners::" in result.stderr
+
+
+def test_policy_takes_a_path_to_one_file_and_a_choice_of_rules(workspace, workflows):
+    bad = workflows / "bad.yml"
+    bad.write_text(GOOD_WORKFLOW.replace("    timeout-minutes: 5\n", ""), encoding="utf-8")
+    assert not policy(workspace, path=str(bad.relative_to(workspace))).ok
+    assert policy(workspace, rules="pinned-actions,pinned-runners").ok
+    assert "unknown rule" in policy(workspace, rules="pinned-action").stderr
+
+
+def test_policy_allows_id_token_only_for_the_jobs_it_is_told_about(workspace, workflows):
+    (workflows / "publish.yml").write_text(
+        GOOD_WORKFLOW.replace(
+            "    timeout-minutes: 5\n",
+            "    timeout-minutes: 5\n    permissions:\n      id-token: write\n",
+        ).replace("  test:", "  publish-pypi:"),
+        encoding="utf-8",
+    )
+    assert not policy(workspace).ok
+    assert policy(workspace, **{"id-token-jobs": "publish-pypi"}).ok
+
+
+def test_policy_refuses_what_it_cannot_read_and_an_empty_place(workspace, workflows):
+    (workflows / "odd.yml").write_text("on: push\njobs: &x {}\n", encoding="utf-8")
+    result = policy(workspace)
+    assert not result.ok and "cannot be checked, so it is not trusted" in result.stderr
+    empty = workspace / "nothing"
+    empty.mkdir()
+    assert "no workflow files" in policy(workspace, path="nothing").stderr

@@ -4,7 +4,7 @@ Every action, its inputs and outputs, and what a failure looks like. The tables 
 
 Conventions common to all of them:
 
-- **Pin by commit.** `uses: tanakapayam/actions/<path>@<40-hex commit> # v0.1.3`.
+- **Pin by commit.** `uses: tanakapayam/actions/<path>@<40-hex commit> # v0.2.0`.
 - **Paths** are relative to the workspace (`$GITHUB_WORKSPACE`) unless absolute, such as `${{ runner.temp }}/dist` or `packages/foo/dist`. Every step of every action sets its own `working-directory` to the workspace root, so a job's `defaults.run.working-directory` (a monorepo's `python/`, say) never changes what a path means.
 - **Booleans are the strings** `"true"` and `"false"`, because every input is a string.  Quote them in YAML (`expect-provenance: "true"`).
 - **Failures** are a GitHub `::error::` annotation with a reason, and a failed step.
@@ -32,7 +32,7 @@ It fails unless: there is a release tag; the version is not empty; the tag is ex
   run: echo "version=$(python -c 'import mypkg; print(mypkg.__version__)')" >> "$GITHUB_OUTPUT"
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
+  uses: tanakapayam/actions/release/guard@<commit> # v0.2.0
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -138,3 +138,71 @@ Not-yet-there answers (the index and its CDN lag behind an upload) are retried: 
 <!-- /generated -->
 
 Run it **after** the upload step, and understand what a failure means: the upload is done and cannot be undone, so do not re-run it, look at the release (see the guide).
+
+## `ci/all-green`
+
+The one check to require on a branch. It reads `toJSON(needs)` of the calling job and fails unless every job in it has the result `success`. A job that was skipped, cancelled or failed fails the check; a skip is acceptable only for a job named in `allow-skipped`, and a name there that is not one of the jobs waited for is an error, so a typo cannot allow nothing quietly. An empty `needs` is an error too: a gate that waits for nothing checks nothing. The calling job must list the jobs under `needs:` and have `if: always()`.
+
+<!-- generated:ci/all-green -->
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `needs` | yes | none | The jobs to check: the `toJSON` of the calling job's `needs` context, passed as it is. The calling job must list the jobs in `needs:` and have `if: always()`, or it is skipped when one of them fails, and a skipped required check passes. |
+| `allow-skipped` | no | empty | Jobs whose `skipped` result is acceptable, such as one that only runs on some events, separated by commas or new lines. |
+<!-- /generated -->
+
+```yaml
+all-green:
+  needs: [test, lint]
+  if: always()
+  runs-on: ubuntu-24.04
+  timeout-minutes: 5
+  steps:
+    - uses: actions/checkout@<commit> # v7.0.1
+      with:
+        persist-credentials: false
+```
+
+The step prints a line per job and appends a table of results to the job summary.
+
+## `python/supported-versions`
+
+Reads the `Programming Language :: Python :: 3.x` classifiers of a `pyproject.toml` and prints the versions as a matrix, oldest first. With `check-requires-python: "true"` (the default) it also fails if a classifier is outside `requires-python`, or if `requires-python` admits a version no classifier lists, since users could install where nothing was tested. Only simple specifiers (`>=3.11`, optionally with `<3.15` or `!=`) are compared; others give a `::warning::` and the classifiers are used as they are. There must be at least one classifier.
+
+<!-- generated:python/supported-versions -->
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `pyproject` | no | `pyproject.toml` | The `pyproject.toml` to read, relative to the workspace. |
+| `check-requires-python` | no | `true` | `true` to fail when a classifier is outside `requires-python`, or when `requires-python` admits a version that no classifier lists. A specifier that is not simple is not checked. |
+
+| Output | Description |
+| --- | --- |
+| `matrix` | The versions as a compact JSON list, oldest first, such as `["3.11","3.12","3.13"]`. Feed it to a matrix with `fromJSON` on this job's output. |
+| `oldest` | The oldest version claimed, such as `3.11`, a good one for lint and type checks. |
+| `latest` | The newest version claimed, such as `3.14`. |
+<!-- /generated -->
+
+Give the step an `id` and read its outputs, or expose them as job outputs for a matrix in another job (see the [examples](examples.md#a-test-matrix-that-cannot-drift-from-the-classifiers)).
+
+## `workflow/policy`
+
+Checks workflow files against rules that keep a release pipeline trustworthy. Every finding is an annotation on its line, titled with the rule; any finding fails the step. The rules:
+
+- `pinned-actions`: every `uses:` is a 40-hex commit with a `# v1.2.3` comment; a local `./` action is fine; a container image needs a digest.
+- `pinned-runners`: no runner label with `latest` in it (a `${{ matrix.<key> }}` label is resolved through the matrix).
+- `read-only-token`: top-level `permissions` is `contents: read`.
+- `job-timeouts`: every job has `timeout-minutes`.
+- `checkout-credentials`: every `actions/checkout` has `persist-credentials: false`.
+- `no-stored-secrets`: only the secrets in `allow-secrets` are used, and `secrets: inherit` is refused.
+- `oidc-jobs`: `id-token: write` only on the jobs in `id-token-jobs`, never at the top level.
+- `concurrency`: the workflow has a `concurrency` group. Off by default.
+
+The checker reads YAML with its own small reader, which refuses anything it would have to guess at (anchors, aliases, tags, merge keys, duplicate keys, multi-line quoted or flow scalars, tabs, a second document) as a finding with the rule `parse`. A file that is not a workflow, an empty directory and an unknown rule are errors as well. [Why](faq.md#why-does-the-policy-checker-carry-its-own-yaml-reader).
+
+<!-- generated:workflow/policy -->
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `path` | no | `.github/workflows` | The workflows to check: a directory of them or one file, relative to the workspace. |
+| `rules` | no | `pinned-actions,pinned-runners,read-only-token,job-timeouts,checkout-credentials,no-stored-secrets,oidc-jobs` | The rules to enforce, separated by commas or new lines: `pinned-actions`, `pinned-runners`, `read-only-token`, `job-timeouts`, `checkout-credentials`, `no-stored-secrets`, `oidc-jobs` and `concurrency`. The default is every rule except `concurrency`. |
+| `id-token-jobs` | no | empty | The jobs allowed `id-token: write` (the ones that publish with trusted publishing), separated by commas or new lines. With none, no job may have it. |
+| `allow-secrets` | no | `GITHUB_TOKEN` | The secrets a workflow may use, separated by commas or new lines. Only used by the `no-stored-secrets` rule. |
+<!-- /generated -->

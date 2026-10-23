@@ -6,6 +6,17 @@ A release is a Git tag `vMAJOR.MINOR.PATCH`. Consumers pin the commit, not the t
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
+### Added
+
+These describe the next release: the pins in the documentation name `v0.1.3`, which does not contain them.
+
+- `ci/all-green`: the single required check, from `toJSON(needs)`. A skipped job is a failure unless allowed, an empty `needs` is an error, and an `allow-skipped` name that is not a job is an error.
+- `python/supported-versions`: the Python versions in a package's classifiers as a matrix (`matrix`, `oldest`, `latest`), failing if they contradict `requires-python`.
+- `workflow/policy`: eight rules over workflow files (pinned actions and runners, read-only token, job timeouts, checkout credentials, stored secrets, OIDC jobs, concurrency), with its own fail-closed YAML reader that refuses what it would have to guess at. It is tested against PyYAML on real workflow files.
+- The failure catalogue covers every message of the new scripts, and a test keeps it so.
+
 ### Changed
 
 - Documentation: conclude is described as the first real consumer, with a link to its workflow as a worked example, and what its first runs taught (the changes of 0.1.1 to 0.1.3). The migration guide is a record plus a generic order of work, and no longer a plan with placeholders. The testing page says plainly what has run for real and what has not (a real `publish-pypi` job end to end, and npm). The TestPyPI provenance check is described as confirmed on a real rehearsal.

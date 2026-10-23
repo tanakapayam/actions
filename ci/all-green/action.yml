@@ -1,0 +1,36 @@
+name: All green
+description: >-
+  The one check to require on a branch: fails unless every job the calling job waits for
+  succeeded. A skipped job counts as a failure unless allowed, because a skipped job is how a
+  required check quietly stops checking. Use it in a job with `if: always()` and a `needs:` list.
+
+inputs:
+  needs:
+    description: >-
+      The jobs to check: the `toJSON` of the calling job's `needs` context, passed as it is. The calling job must list
+      the jobs in `needs:` and have `if: always()`, or it is skipped when one of them fails, and a
+      skipped required check passes.
+    required: true
+  allow-skipped:
+    description: >-
+      Jobs whose `skipped` result is acceptable, such as one that only runs on some events,
+      separated by commas or new lines.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Check that every job succeeded
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        NEEDS: ${{ inputs.needs }}
+        ALLOW_SKIPPED: ${{ inputs.allow-skipped }}
+      run: |
+        args=(--needs "$NEEDS")
+        IFS=$', \n' read -r -d '' -a allowed <<< "$ALLOW_SKIPPED" || true
+        for job in "${allowed[@]}"; do
+          if [ -n "$job" ]; then args+=(--allow-skipped "$job"); fi
+        done
+        python3 "$ACTION_PATH/../../lib/all_green.py" "${args[@]}"

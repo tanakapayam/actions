@@ -1,0 +1,44 @@
+name: Workflow policy
+description: >-
+  Hold GitHub Actions workflows to the rules that keep a release pipeline trustworthy: every action
+  pinned to a commit with a version comment, runners that do not say `latest`, a read-only default
+  token, timeouts, checkouts that drop their credentials, no stored secrets, and an OIDC identity
+  only for the jobs that publish. A workflow the checker cannot read is a failure, not a skip.
+
+inputs:
+  path:
+    description: >-
+      The workflows to check: a directory of them or one file, relative to the workspace.
+    default: .github/workflows
+  rules:
+    description: >-
+      The rules to enforce, separated by commas or new lines: `pinned-actions`, `pinned-runners`,
+      `read-only-token`, `job-timeouts`, `checkout-credentials`, `no-stored-secrets`, `oidc-jobs` and
+      `concurrency`. The default is every rule except `concurrency`.
+    default: pinned-actions,pinned-runners,read-only-token,job-timeouts,checkout-credentials,no-stored-secrets,oidc-jobs
+  id-token-jobs:
+    description: >-
+      The jobs allowed `id-token: write` (the ones that publish with trusted publishing), separated by
+      commas or new lines. With none, no job may have it.
+    default: ""
+  allow-secrets:
+    description: >-
+      The secrets a workflow may use, separated by commas or new lines. Only used by the
+      `no-stored-secrets` rule.
+    default: GITHUB_TOKEN
+
+runs:
+  using: composite
+  steps:
+    - name: Check the workflows against the policy
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        WORKFLOWS: ${{ inputs.path }}
+        RULES: ${{ inputs.rules }}
+        ID_TOKEN_JOBS: ${{ inputs.id-token-jobs }}
+        ALLOW_SECRETS: ${{ inputs.allow-secrets }}
+      run: |
+        python3 "$ACTION_PATH/../../lib/workflow_policy.py" "$WORKFLOWS" \
+          --rules "$RULES" --id-token-jobs "$ID_TOKEN_JOBS" --allow-secrets "$ALLOW_SECRETS"

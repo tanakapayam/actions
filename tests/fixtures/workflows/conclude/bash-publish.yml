@@ -1,0 +1,160 @@
+name: Bash Publish
+
+# Publishes conclude.sh as a release asset, in two stages, with a person in between:
+#
+#   build       Guard the release, run the packaging safeguards on the exact file, and
+#               upload it (plus its sha256) as an artifact.
+#   production  Waits for a reviewer to approve the `bash-release` environment, checks the
+#               file is byte-for-byte the one that was built, attaches conclude.sh and
+#               conclude.sh.sha256 to the GitHub Release, then downloads them back from the
+#               public release URL and checks the checksum, as a user would.
+#
+# Production only ever happens from a published GitHub Release with a `bash-v<version>` tag.
+# A manual run (Actions -> Bash Publish -> Run workflow) is a rehearsal: it builds and checks
+# everything but attaches nothing. An asset is never overwritten: a second attempt to attach
+# the same file name to the same release fails, so a released version cannot change under
+# anyone who pinned it. Fix a bad release by publishing a new version.
+#
+# One-time setup is in bash/RELEASING.md: the `bash-release` environment (required reviewers).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bash-publish-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: bash
+
+jobs:
+  ci:
+    name: CI
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'bash-v')
+    uses: ./.github/workflows/bash-ci.yml
+
+  build:
+    name: Check and package the file
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.package.outputs.sha256 }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the version
+        id: version
+        run: echo "version=$(sed -n 's/^CONCLUDE_VERSION="\(.*\)"$/\1/p' src/conclude.sh)" >> "$GITHUB_OUTPUT"
+      - name: Check the release is ready
+        if: github.event_name == 'release'
+        uses: tanakapayam/actions/release/guard@d85ef0d8e58c34845b6d7efe29ff16f154d00a32 # v0.1.3
+        with:
+          tag-prefix: bash-v
+          version: ${{ steps.version.outputs.version }}
+          changelog: bash/CHANGELOG.md
+      - name: Build Bash 5.3 (the packaging safeguards need it)
+        env:
+          BASH_TARBALL_SHA256: ${{ vars.BASH_TARBALL_SHA256 }}
+        run: scripts/install-bash.sh 5.3
+      - name: Packaging safeguards on the exact file that will be released
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/smoke.sh src/conclude.sh "$VERSION"
+      - name: Package
+        id: package
+        run: |
+          mkdir -p "$RUNNER_TEMP/dist"
+          cp src/conclude.sh "$RUNNER_TEMP/dist/conclude.sh"
+          (cd "$RUNNER_TEMP/dist" && sha256sum conclude.sh > conclude.sh.sha256)
+          echo "sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/dist/conclude.sh.sha256")" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/dist/conclude.sh.sha256"
+      - name: Upload the release files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bash-release
+          path: |
+            ${{ runner.temp }}/dist/conclude.sh
+            ${{ runner.temp }}/dist/conclude.sh.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  production:
+    name: Attach to the GitHub Release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # This job never checks out the repo (nothing here needs the source), so
+    # the file-level `defaults.run.working-directory: bash` would have every
+    # `run:` step below start by `cd`-ing into a `bash/` that doesn't exist.
+    # Every step either sets its own working-directory or only needs $RUNNER_TEMP
+    # and $GITHUB_STEP_SUMMARY, so "." (the actual, empty checkout-less workspace) is correct here.
+    defaults:
+      run:
+        working-directory: .
+    # The approval gate: the job waits here until a required reviewer approves the `bash-release` environment.
+    environment:
+      name: bash-release
+      url: ${{ github.event.release.html_url }}
+    permissions:
+      contents: write # attach assets to the release with the workflow's own token
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+      VERSION: ${{ needs.build.outputs.version }}
+      BUILT: ${{ needs.build.outputs.sha256 }}
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bash-release
+          path: ${{ runner.temp }}/dist
+      - name: Check this is exactly the file that was built
+        working-directory: ${{ runner.temp }}/dist
+        run: |
+          actual=$(sha256sum conclude.sh | cut -d' ' -f1)
+          if [ "$actual" != "$BUILT" ]; then
+            echo "::error::The file is not the one that was built (built $BUILT, here $actual)."
+            exit 1
+          fi
+          sha256sum -c conclude.sh.sha256
+      - name: Attach both files (an existing asset is never replaced)
+        working-directory: ${{ runner.temp }}/dist
+        run: gh release upload "$TAG" conclude.sh conclude.sh.sha256 --repo "$GITHUB_REPOSITORY"
+      - name: Download it back from the public URL and check it, as a user would
+        run: |
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSLO "$base/conclude.sh" && curl -fsSLO "$base/conclude.sh.sha256"; then
+              break
+            fi
+            [ "$attempt" -lt 6 ] || { echo "::error::could not download the release assets from $base"; exit 1; }
+            sleep 10
+          done
+          sha256sum -c conclude.sh.sha256
+          [ "$(sha256sum conclude.sh | cut -d' ' -f1)" = "$BUILT" ]
+          grep -q "^CONCLUDE_VERSION=\"$VERSION\"$" conclude.sh
+      - name: Summary
+        run: |
+          {
+            echo "### Released \`conclude.sh\` $VERSION"
+            echo ""
+            echo "sha256 \`$BUILT\`, downloaded back from the release and checked."
+            echo ""
+            echo "\`\`\`sh"
+            echo "curl -fsSLO https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/conclude.sh"
+            echo "\`\`\`"
+            echo ""
+            echo "If it turns out to be wrong: publish a fixed version. Assets are never replaced."
+          } >> "$GITHUB_STEP_SUMMARY"

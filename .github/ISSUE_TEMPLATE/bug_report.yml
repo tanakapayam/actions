@@ -25,6 +25,9 @@ body:
         - python/rehearsal-version
         - python/verify-install
         - python/verify-published
+        - ci/all-green
+        - python/supported-versions
+        - workflow/policy
         - A template or the documentation
     validations:
       required: true

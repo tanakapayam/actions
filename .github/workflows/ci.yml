@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,6 +72,18 @@ jobs:
           persist-credentials: false
       - name: Set up uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Hold the workflows to the policy
+        uses: ./workflow/policy
+        with:
+          rules: |
+            pinned-actions
+            pinned-runners
+            read-only-token
+            job-timeouts
+            checkout-credentials
+            no-stored-secrets
+            oidc-jobs
+            concurrency
       - name: actionlint
         # Pinned here, and kept current by hand: Dependabot does not read `uvx` commands.
         run: uvx --from actionlint-py==1.7.12.25 actionlint
@@ -180,6 +192,31 @@ jobs:
           echo "$VERSION"
           [[ "$VERSION" =~ ^0\.3\.0\.dev[0-9]+$ ]]
 
+      - name: Read the Python versions the fixture claims
+        id: versions
+        uses: ./python/supported-versions
+        with:
+          pyproject: tests/fixtures/sample-pkg/pyproject.toml
+      - name: Check what it read
+        env:
+          MATRIX: ${{ steps.versions.outputs.matrix }}
+          OLDEST: ${{ steps.versions.outputs.oldest }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          test "$MATRIX" = '["3.11","3.12","3.13"]'
+          test "$OLDEST" = 3.11
+          test "$LATEST" = 3.13
+      - name: A pyproject without classifiers must be refused
+        id: no-classifiers
+        continue-on-error: true
+        uses: ./python/supported-versions
+        with:
+          pyproject: tests/fixtures/CHANGELOG.md
+      - name: Check that it was refused as well
+        env:
+          OUTCOME: ${{ steps.no-classifiers.outcome }}
+        run: test "$OUTCOME" = failure
+
       - name: The guard passes a ready release
         uses: ./release/guard
         with:
@@ -231,14 +268,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Check out, for the action below
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Every job succeeded
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: |
-          echo "$RESULTS"
-          python3 -c '
-          import json, os, sys
-          needs = json.loads(os.environ["RESULTS"])
-          bad = {name: job["result"] for name, job in needs.items() if job["result"] != "success"}
-          sys.exit(f"not successful: {bad}" if bad else 0)
-          '
+        uses: ./ci/all-green
+        with:
+          needs: ${{ toJSON(needs) }}

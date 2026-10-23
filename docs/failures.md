@@ -79,6 +79,93 @@ When the attempts run out, the failure is `<step>: still not there after <n> att
 
 After the upload, a red read-back means *look at the release*, never *run it again*: the upload is finished and cannot be undone. See [the guide](guide.md#if-the-read-back-is-red).
 
+## `ci/all-green`
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `needs is not JSON (<why>): pass it ${{ toJSON(needs) }}` | The `needs` input is not the JSON of the `needs` context, often because it was typed by hand or left out. | Write `needs: ${{ toJSON(needs) }}` exactly. |
+| `needs must be the JSON of the needs context: an object with a result for each job` | The value is JSON but not shaped like the `needs` context. | Pass `toJSON(needs)`, not a list of names. |
+| `needs is empty: this job waits for nothing, so it checks nothing` | The calling job has no `needs:`, so there was nothing to check. | List the jobs to wait for under `needs:`. |
+| `allow-skipped names <name>, which is not one of the jobs waited for (<jobs>)` | A name in `allow-skipped` is not in `needs:`, usually a typo, and a typo would allow nothing and hide that. | Fix the name, or add the job to `needs:`. |
+| `not every job succeeded: <job> <result>` | A job failed, was cancelled, or was skipped without being allowed. | Open that job. If a skip is normal (a job that runs only on some events), name it in `allow-skipped`. |
+
+## `python/supported-versions`
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `<file> does not exist.` | The `pyproject` path is wrong. | Check `pyproject:`, which is relative to the workspace (did a checkout step run first?). |
+| `<file> is not valid TOML (<why>).` | The file cannot be parsed. | Fix the syntax the message points at. |
+| `<file> has no [project] table.` | There is no `[project]` table to read classifiers from. | Add one, or point `pyproject:` at the right file. |
+| `<file> lists no 'Programming Language :: Python :: 3.x' classifiers, so there is no list of versions to test: add one for each version you support.` | There are no classifiers, so there is nothing to build a matrix from. | Add a `Programming Language :: Python :: 3.x` classifier for each version you support. |
+| `classifier Python <versions> is outside requires-python '<spec>': remove the classifier, or widen requires-python.` | A classifier claims a version that `requires-python` rules out. | Remove the classifier, or widen `requires-python`. |
+| `requires-python '<spec>' admits Python <versions>, which no classifier lists: raise requires-python, or add the classifiers and test them.` | `requires-python` allows a version that is not tested, so users can install where nothing was checked. | Raise `requires-python`, or add the classifiers so the version is tested. |
+
+A `::warning::` (not a failure) says `requires-python '<spec>' was not understood` when the specifier is not a simple one (`>=3.11`, `>=3.11,<3.15`); the classifiers are still used, but the two are not compared.
+
+## `workflow/policy`
+
+Each finding is an annotation on the line it is about, titled with its rule, for example `::error file=.github/workflows/ci.yml,line=12,title=pinned-actions::<message>`. The message starts with what was found.
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `<uses> is not pinned to a commit (owner/repo@<40 hex> # v1.2.3)` | A tag or branch can move, so the code that runs can change without a change here (`pinned-actions`). | Pin the 40-hex commit and keep the version in a comment. |
+| `<uses> has no version comment (# v1.2.3) saying what the commit is` | A bare commit says nothing to the reader or to an updater (`pinned-actions`). | Add `# v1.2.3` after the commit. |
+| `<uses> is a container image without a digest (image@sha256:<64 hex>)` | An image tag can move (`pinned-actions`). | Pin the image by digest. |
+| `job <job> runs on <label>, which moves under you: name a version, such as ubuntu-24.04` | `latest` changes under you on the provider's schedule (`pinned-runners`). | Name a version. A `${{ matrix.<key> }}` label is checked through the matrix. |
+| `the workflow has no top-level permissions, so its token gets the repository's default: add 'permissions: contents: read'` | The token gets whatever the repository default is (`read-only-token`). | Add `permissions: contents: read` at the top. |
+| `the default permissions are <value>: use 'contents: read' and give a job more only where it needs it` | The top-level permissions are not a read-only map (`read-only-token`). | Use `contents: read` on top, and grant more per job. |
+| `the default permissions include <scopes>: keep the top level to 'contents: read' and give a job more only where it needs it` | Every job gets the extra scopes (`read-only-token`). | Move them to the jobs that need them. |
+| `job <job> has no timeout-minutes, so a hang runs for six hours` | A stuck job holds a runner and a check (`job-timeouts`). | Set `timeout-minutes:`. |
+| `actions/checkout keeps the token in the clone unless it is given 'persist-credentials: false'` | Later steps could read the token from the clone (`checkout-credentials`). | Add `persist-credentials: false` to the checkout's `with:`. |
+| `uses secrets.<name>: publish with trusted publishing, and do not keep a token that could leak` | A stored secret can leak, and one that publishes is the thing trusted publishing replaces (`no-stored-secrets`). | Use trusted publishing, or add the name to `allow-secrets` if it is meant. |
+| `secrets: inherit hands every secret to the called workflow` | The called workflow gets every secret (`no-stored-secrets`). | Pass the secrets it needs by name. |
+| `id-token: write at the top level gives every job an identity it can show to a registry` | Every job can publish as this workflow (`oidc-jobs`). | Grant it on the publishing job only. |
+| `job <job> may write id-token but is not one of the jobs allowed to (<jobs>)` | A job that is not a publisher has an identity (`oidc-jobs`). | Remove it, or list the job in `id-token-jobs`. |
+| `the workflow has no concurrency group, so two runs of it can overlap` | Two runs can race (`concurrency`, off by default). | Add a `concurrency:` group, or leave the rule out. |
+
+These findings are about the workflow itself, with the rule `parse`:
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `cannot be checked, so it is not trusted: <why>` | The file uses YAML the checker's reader will not guess at (the reasons are below). A file it cannot read is a failure, never a skip. | Write it in the plain block style the message asks for. |
+| `is not a workflow: there is no top-level 'jobs'` | The file under the path is not a workflow. | Move it out of the directory, or point `path:` at the workflows. |
+
+The reader is deliberately small and refuses what it would have to guess. Its reasons, each with a line number:
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `a tab is used for indentation; YAML indents with spaces` | A tab in the indentation. | Use spaces. |
+| `a second document in one file is not supported` | A `---` line starts a second document. | Keep one workflow per file. |
+| `a complex key, anchor, alias, tag or merge key is not supported` | A `? key`, `&anchor`, `*alias`, `!tag` or `<<` key. | Write the value out. |
+| `an anchor, alias or tag is not supported` | Anchors, aliases and tags in a value. | Write the value out. |
+| `the key <key> appears twice in one mapping` | A repeated key, where YAML parsers disagree on which wins. | Remove one. |
+| `unexpected content: is the indentation consistent?` | Lines that do not line up. | Fix the indentation. |
+| `unexpected indentation` | A line indented further than its parent allows. | Fix the indentation. |
+| `expected 'key: value', found <text>` | A line that is neither a key nor a list item. | Fix the line. |
+| `expected ':' after a quoted key` | A quoted key without its colon. | Add it. |
+| `a plain value that contains ': ' is ambiguous: quote it` | A plain value with `: ` in it. | Quote the value. |
+| `a sequence entry is not allowed here: quote the value` | A `- ` where a value is expected. | Quote the value. |
+| `<value> is a number or date this reader does not model: quote it` | Dates, hex, octal and the like, which parsers read differently. | Quote the value. |
+| `a sequence inside a sequence on one line is not supported` | `- - x`. | Put each on its own line. |
+| `unexpected text after a quoted string` | Text after a closing quote. | Fix the quoting. |
+| `a quoted string that does not close on its line is not supported` | A quoted string over several lines. | Keep it on one line, or use `\|` or `>`. |
+| `the escape \<char> in a double-quoted string is not supported` | An escape the reader does not model. | Use single quotes or another spelling. |
+| `cannot read the block scalar header <header>` | A `\|` or `>` header with something unusual after it. | Use `\|`, `\|-`, `>` or `>-`. |
+| `a flow collection that does not close on its line is not supported` | A `[...]` or `{...}` over several lines. | Write it in block style. |
+| `a flow sequence that does not close on its line is not supported` | A `[...]` over several lines. | Write it in block style. |
+| `a flow mapping that does not close on its line is not supported` | A `{...}` over several lines. | Write it in block style. |
+| `unexpected text after a flow collection` | Text after the closing bracket. | Fix the line. |
+
+One more reason, kept out of the table because it contains a pipe: `a plain value that continues on the next line is not supported: quote it or use |`. Quote the value, or write it as a block scalar.
+
+Errors about the call itself, which stop the check before any file is read:
+
+| You see | It means | Do  |
+| ------- | -------- | --- |
+| `<path> does not exist.` | The `path` is wrong. | Check `path:`, relative to the workspace (did a checkout step run first?). |
+| `no workflow files (*.yml, *.yaml) under <path>.` | Nothing to check, which is a failure and never a pass. | Check `path:`. |
+| `unknown rule <name>; the rules are <rules>.` | A name in `rules` is not a rule (a typo would otherwise disable a check). | Use the names in the list. |
+
 ## Where the messages are shown
 
 - In the step's log, as `::error::` lines.

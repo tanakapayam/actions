@@ -117,16 +117,22 @@ def test_no_workflow_silences_shellcheck_it_fixes_the_script():
         assert "shellcheck disable" not in path.read_text(encoding="utf-8"), path.name
 
 
-def test_ci_runs_every_action_for_real_in_the_dogfood_job():
+def test_ci_runs_every_action_for_real():
+    # The dogfood job runs most of them; `all-green` is the gate and has a job of its own, and
+    # `workflow/policy` reads the workflows in the job that lints them.
     ci = load(ROOT / ".github" / "workflows" / "ci.yml")
     used = {
         step["uses"][2:]
-        for step in jobs(ci)["dogfood"]["steps"]
+        for job in jobs(ci).values()
+        for step in job["steps"]
         if step.get("uses", "").startswith("./")
     }
     assert used == set(ACTIONS), (
         f"not dogfooded: {set(ACTIONS) - used}; unknown: {used - set(ACTIONS)}"
     )
+    assert {step["uses"][2:] for step in jobs(ci)["all-green"]["steps"] if "uses" in step} >= {
+        "ci/all-green"
+    }
 
 
 def test_dogfood_fingerprints_across_a_real_upload_and_download():

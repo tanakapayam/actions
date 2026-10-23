@@ -2,7 +2,7 @@
 
 [conclude](https://github.com/tanakapayam/conclude) is where these actions came from, so it is also the first consumer. Its three publish workflows each carried their own copy of the same ideas; this maps every copy to the action that replaced it, records what the first real runs taught, and gives the order that is safe for another repository.
 
-The migration changed release plumbing, not the package, so it shipped as plain commits with a dry run to prove each one. A repository pins commits only once this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.1.3 'v0.1.3^{}' | tail -n1 | cut -f1`).
+The migration changed release plumbing, not the package, so it shipped as plain commits with a dry run to prove each one. A repository pins commits only once this repository has a tagged release (`git ls-remote --tags https://github.com/tanakapayam/actions v0.2.0 'v0.2.0^{}' | tail -n1 | cut -f1`).
 
 ## Python (`python-publish.yml`)
 
@@ -57,12 +57,12 @@ stage:
   # ...matrix and setup as today...
   steps:
     - name: Check these are exactly the distributions that were built
-      uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.1.3
+      uses: tanakapayam/actions/artifact/verify-fingerprint@<commit> # v0.2.0
       with:
         path: ${{ runner.temp }}/dist
         expected: ${{ needs.build.outputs.integrity }}
     - name: Install them into clean environments and smoke-test
-      uses: tanakapayam/actions/python/verify-install@<commit> # v0.1.3
+      uses: tanakapayam/actions/python/verify-install@<commit> # v0.2.0
       with:
         dist: ${{ runner.temp }}/dist
         source-root: python
@@ -75,7 +75,7 @@ and in `publish-pypi`, after the upload:
 
 ```yaml
 - name: Install the release back from PyPI and check it
-  uses: tanakapayam/actions/python/verify-published@<commit> # v0.1.3
+  uses: tanakapayam/actions/python/verify-published@<commit> # v0.2.0
   with:
     dist: dist
     expect-provenance: "true"
@@ -102,7 +102,7 @@ A consumer's first runs found what the tests had not, and each became a release 
 
 - **v0.1.1: a build's hidden files.** `uv build` leaves a `.gitignore` in its output directory and `actions/upload-artifact` leaves hidden files out, so a fingerprint that counted everything never survived the trip between jobs. Hidden files are no longer counted by default (`include-hidden` opts in), a mismatch lists the files, and CI now fingerprints across a real upload and download.
 - **v0.1.2: a retry that read like a failure.** A real TestPyPI index listed the release a moment before the page `pip` reads did, and the log said `ERROR: No matching distribution found`. A retry is now `not yet:`, says when it looks again, and says when it got there.
-- **v0.1.3: the rehearsal checks provenance too.** TestPyPI serves attestations, so the rehearsal does what the real upload does, and is the real thing in everything but the version number.
+- **v0.2.0: the rehearsal checks provenance too.** TestPyPI serves attestations, so the rehearsal does what the real upload does, and is the real thing in everything but the version number.
 
 ## Order of work for another repository
 

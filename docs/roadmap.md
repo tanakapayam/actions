@@ -4,6 +4,8 @@ Nothing here is promised or dated. It is the order in which things will be built
 
 ## Next
 
+- **`lint/workflows`**: `actionlint` with ShellCheck and `zizmor`, pinned and run together, generalizing the `workflows` job of this repository's CI. `workflow/policy` is the part that is ours; this is the part that is other people's tools.
+- **`python/check-sdist`**: the sdist alone, built and installed in a clean environment, for a package that does not publish with the rest of the pipeline.
 - **`node/verify-published`**: the npm read-back (registry listing, integrity, provenance, install in a clean project), generalizing `scripts/registry.mjs` from conclude. Plus a template for publishing an npm package.
 - **`bash/setup-bash`**: build a pinned Bash from source with a checked hash, for repositories that need a newer Bash than the runner's, generalizing conclude's `install-bash.sh`.
 - **`github-release/verify-assets`**: the same read-back for a GitHub Release that ships files and their checksums (what conclude's Bash release does).
@@ -11,7 +13,8 @@ Nothing here is promised or dated. It is the order in which things will be built
 
 ## Maybe
 
-- **Reusable CI workflows**, if a second package has the same shape as the first. A reusable workflow is fine for CI (nothing in CI needs an OIDC identity); it is publishing that needs the composite design. Not worth abstracting from one example.
+- **Starter templates**: a CI skeleton, `dependabot.yml` and community files that already pass `workflow/policy`.
+- **Reusable CI workflows** (a `python-ci.yml`), if a second package has the same shape as the first. A reusable workflow is fine for CI (nothing in CI needs an OIDC identity); it is publishing that needs the composite design. Not worth abstracting from one example.
 - **`uses: $/path`** for this repository's own actions in its own workflows, which `zizmor` now prefers over `./path`, once it has been tried on a real run (`.github/zizmor.yml` says where).
 - **Online `zizmor`** audits in CI beyond the offline ones, with a token.
 - **Immutable releases** on this repository, if the setting is available, so a published tag cannot be moved even by its owner.

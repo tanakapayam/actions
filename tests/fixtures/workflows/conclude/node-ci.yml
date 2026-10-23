@@ -1,0 +1,112 @@
+name: Node CI
+
+on:
+  push:
+    branches:
+      - main
+      - node
+      - ci-*
+  pull_request:
+  workflow_call: # node-publish.yml runs this before it publishes anything
+
+permissions:
+  contents: read
+
+# Every third-party action is pinned to a full commit SHA (the version is
+# in the trailing comment); .github/dependabot.yml keeps them current.
+
+defaults:
+  run:
+    working-directory: node
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    # Experimental legs report without gating a merge or a release.
+    continue-on-error: ${{ matrix.experimental == true }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+        node: ["24"] # the only LTS line "engines" allows
+        include:
+          # Node 26 becomes LTS on 2026-10-28.
+          - os: ubuntu-24.04
+            node: "26"
+            experimental: true
+          # Early warning for the `ubuntu-latest` move to 26.04 (rolling out
+          # October 19 - November 19, 2026).
+          - os: ubuntu-26.04
+            node: "24"
+            experimental: true
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+      - name: Install (exactly what package-lock.json says)
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Conformance fixtures and tests
+        run: npm test
+
+  package:
+    name: build, pack and smoke-test the tarball
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build, pack, install the tarball elsewhere, and check it
+        run: npm run smoke
+
+  rehearsal:
+    name: staging rehearsal (local registry)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Start a local registry (Verdaccio), standing in for GitHub Packages
+        run: |
+          nohup npx --yes verdaccio@6.10.4 --config scripts/verdaccio.yaml --listen 127.0.0.1:4873 > "$RUNNER_TEMP/verdaccio.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4873/-/ping > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/verdaccio.log"
+          exit 1
+      - name: Rehearse the staging steps (publish, re-run, refuse a changed tarball, install back)
+        run: npm run rehearse
+        env:
+          REHEARSAL_REGISTRY: http://127.0.0.1:4873
+          TAG: next

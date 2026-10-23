@@ -10,13 +10,23 @@ import argparse
 import urllib.error
 from pathlib import Path
 
+import all_green
 import fingerprint
 import guard
 import pyrelease
 import pytest
+import supported_versions
+import workflow_policy
 from test_pyrelease import make_dist, make_source
 
-SCRIPTS = {"guard": guard, "fingerprint": fingerprint, "pyrelease": pyrelease}
+SCRIPTS = {
+    "guard": guard,
+    "fingerprint": fingerprint,
+    "pyrelease": pyrelease,
+    "all_green": all_green,
+    "supported_versions": supported_versions,
+    "workflow_policy": workflow_policy,
+}
 
 
 def walk(parser: argparse.ArgumentParser, name: str):
@@ -279,3 +289,25 @@ def test_the_last_attempt_does_not_promise_another_look(monkeypatch, capsys):
 )
 def test_pips_error_prefix_is_not_shown_in_the_middle_of_a_retry(stderr, shown):
     assert pyrelease.last_line(stderr) == shown
+
+
+def test_the_new_checks_report_on_the_summary_page_both_ways(tmp_path, summary):
+    needs = '{"test": {"result": "success"}, "lint": {"result": "failure"}}'
+    assert all_green.main(["--needs", needs]) == 1
+    assert "❌" in summary.read_text(encoding="utf-8")
+    assert all_green.main(["--needs", '{"test": {"result": "success"}}']) == 0
+    assert "✅" in summary.read_text(encoding="utf-8")
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nrequires-python = ">=3.11"\n'
+        'classifiers = ["Programming Language :: Python :: 3.11"]\n',
+        encoding="utf-8",
+    )
+    assert supported_versions.main([str(pyproject)]) == 0
+    assert "3.11" in summary.read_text(encoding="utf-8")
+    assert supported_versions.main([str(tmp_path / "missing.toml")]) == 1
+    workflows = tmp_path / "wf"
+    workflows.mkdir()
+    (workflows / "a.yml").write_text("on: push\njobs: {}\n", encoding="utf-8")
+    workflow_policy.main([str(workflows)])
+    assert summary.read_text(encoding="utf-8").strip()

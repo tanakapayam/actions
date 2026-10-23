@@ -1,0 +1,46 @@
+name: Python supported versions
+description: >-
+  Turn the Python versions a package claims (the `Programming Language :: Python :: 3.x`
+  classifiers of its `pyproject.toml`) into a job matrix, so the versions CI tests can never drift
+  from the versions the package says it supports. Also fails if the classifiers contradict
+  `requires-python`.
+
+inputs:
+  pyproject:
+    description: The `pyproject.toml` to read, relative to the workspace.
+    default: pyproject.toml
+  check-requires-python:
+    description: >-
+      `true` to fail when a classifier is outside `requires-python`, or when `requires-python`
+      admits a version that no classifier lists. A specifier that is not simple is not checked.
+    default: "true"
+
+outputs:
+  matrix:
+    description: >-
+      The versions as a compact JSON list, oldest first, such as `["3.11","3.12","3.13"]`. Feed it to a matrix
+      with `fromJSON` on this job's output.
+    value: ${{ steps.versions.outputs.matrix }}
+  oldest:
+    description: The oldest version claimed, such as `3.11`, a good one for lint and type checks.
+    value: ${{ steps.versions.outputs.oldest }}
+  latest:
+    description: The newest version claimed, such as `3.14`.
+    value: ${{ steps.versions.outputs.latest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the supported Python versions
+      id: versions
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PYPROJECT: ${{ inputs.pyproject }}
+        CHECK_REQUIRES_PYTHON: ${{ inputs.check-requires-python }}
+      run: |
+        args=("$PYPROJECT")
+        if [ "$CHECK_REQUIRES_PYTHON" != "true" ]; then args+=(--no-check-requires-python); fi
+        lines=$(python3 "$ACTION_PATH/../../lib/supported_versions.py" "${args[@]}")
+        echo "$lines" >> "$GITHUB_OUTPUT"

@@ -23,6 +23,10 @@ It is **deliberately stricter than GitHub**. It understands only `inputs.*`, `gi
 
 `python/verify-published` is about what happens after an upload, which cannot be tested against the real PyPI without publishing. `FakeIndex` serves a directory the way PyPI does (the JSON API, the simple index, the files, provenance) and can: not list the release yet (`lag=N`), list a wrong hash, serve other bytes than it lists, leave a file unlisted, and omit or empty the provenance. `pip` talks to it like to any index. In CI the `dogfood` job runs `python tests/fakeindex.py` as a real background server and points the real action at it.
 
+## The policy checker's reader
+
+`lib/workflow_policy.py` reads YAML with a small reader of its own ([why](faq.md#why-does-the-policy-checker-carry-its-own-yaml-reader)). `tests/test_workflow_policy.py` compares it with PyYAML on every workflow, template, action manifest and issue form in this repository and on conclude's real workflows (copied to `tests/fixtures/workflows/conclude/`, so the check does not need the network), and the parsed values must be identical. Each thing it refuses has a test that it does refuse it, and each rule has a passing and a failing workflow. The policy is also run on this repository's own workflows in CI.
+
 ## What is not tested
 
 - **A real upload to PyPI through the workflow.** The read-back was run against a real PyPI release (conclude 1.1.0, provenance included) and against TestPyPI in a real consumer's rehearsals, which also exercised the retries on a real index. What has not run is a `publish-pypi` job end to end, with its approval gate; that happens at its first real release. **npm** is not exercised at all (see the [roadmap](roadmap.md)).
@@ -47,7 +51,7 @@ The integration tests build the fixture package offline (`hatchling` and `build`
 2. The logic in `lib/`, standard library only, importable, with a `main()` that prints `::error::` and returns 1 on failure.
 3. Unit tests for the script, and `tests/test_actions.py` tests for the action.
 4. The docs: its messages in `docs/failures.md` (a test fails until every message in `lib/` is listed), an example in `docs/examples.md`, a section and a generated table in `docs/reference.md` (`uv run python scripts/render_reference.py`), a line in the README, and an entry in the CHANGELOG.
-5. A step in the `dogfood` job that runs it for real.
+5. A step in the `dogfood` job, or a job of its own in `ci.yml` where the action needs one (`ci/all-green` is the gate and `workflow/policy` reads the workflows), that runs it for real.
 6. If it belongs in the publish workflow, in the template too.
 
 `tests/test_manifests.py` and `tests/test_repo.py` fail until each of those is true.

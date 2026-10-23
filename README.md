@@ -10,7 +10,7 @@ They were extracted from the release pipelines of [conclude](https://github.com/
 ```yaml
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
+  uses: tanakapayam/actions/release/guard@<commit> # v0.2.0
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -32,7 +32,7 @@ Anyone who publishes a package from GitHub Actions and would like "it shipped" t
 ```yaml
 - name: Check the release is ready
   if: github.event_name == 'release'
-  uses: tanakapayam/actions/release/guard@<commit> # v0.1.3
+  uses: tanakapayam/actions/release/guard@<commit> # v0.2.0
   with:
     tag-prefix: v
     version: ${{ steps.version.outputs.version }}
@@ -50,6 +50,9 @@ Anyone who publishes a package from GitHub Actions and would like "it shipped" t
 | [`python/rehearsal-version`](docs/reference.md#pythonrehearsal-version) | `1.1.0` becomes `1.1.0.dev10101` for rehearsals, new on every run and re-run. |
 | [`python/verify-install`](docs/reference.md#pythonverify-install) | The stage: wheel and sdist hold the whole package, and install and run in clean environments. |
 | [`python/verify-published`](docs/reference.md#pythonverify-published) | After the upload: the index lists, serves and installs the very files you built, with provenance. |
+| [`ci/all-green`](docs/reference.md#ciall-green) | The one check to require: fails unless every job it waits for succeeded, and a skipped job is a failure. |
+| [`python/supported-versions`](docs/reference.md#pythonsupported-versions) | The Python versions a package claims, as a job matrix, checked against `requires-python`. |
+| [`workflow/policy`](docs/reference.md#workflowpolicy) | Workflows held to rules: pinned actions and runners, read-only token, timeouts, no stored secrets, OIDC only where publishing. |
 
 They are independent: use one or all. They check and verify; they never publish. The upload stays in your workflow ([why](docs/trusted-publishing.md)).
 
@@ -87,7 +90,7 @@ Each action is a few lines of `bash` around a standard-library Python script in 
 Pin the **commit**, with the tag as a comment, as for any third-party action:
 
 ```yaml
-- uses: tanakapayam/actions/python/verify-install@<40-hex commit of the release> # v0.1.3
+- uses: tanakapayam/actions/python/verify-install@<40-hex commit of the release> # v0.2.0
   with:
     dist: dist
 ```
